@@ -1,0 +1,80 @@
+:root {
+  --bg: #f3f3f3;
+  --text: #6c6258;
+  --blue: #2f6fff;
+  --accent: #e0a800;
+
+  /* spacing system */
+  --top-margin: 20px;
+  --left-margin: 20px;
+
+  --meta-gap: 60px;
+
+  --content-top: 120px;
+  --content-left: 220px;
+
+  --meta-font: 13px;
+  --poem-name-font: 14px;
+  --content-font: 18px;
+}
+
+/* BASE */
+body {
+  margin: 0;
+  background: var(--bg);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* PAGE */
+.page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* =========================
+   TOP META（横排）
+========================= */
+
+.top-meta {
+  position: absolute;
+  top: var(--top-margin);
+  left: 50%;
+
+  transform: translateX(-50%);
+
+  display: flex;
+  gap: var(--meta-gap);
+
+  font-size: var(--meta-font);
+  color: var(--text);
+}
+
+/* =========================
+   LEFT POEM NAME
+========================= */
+
+.poem-name {
+  position: absolute;
+  left: var(--left-margin);
+  top: 50%;
+
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: left center;
+
+  color: var(--blue);
+  font-size: var(--poem-name-font);
+}
+
+/* =========================
+   CONTENT
+========================= */
+
+.content {
+  position: absolute;
+  top: var(--content-top);
+  left: var(--content-left);
+
+  font-size: var(--content-font);
+  color: var(--accent);
+}
