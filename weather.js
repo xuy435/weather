@@ -31,9 +31,10 @@ const poemDatabase = {
     text: "soft white soft white"
   },
   Wind: {
-    name: "Unheld",
-    text: "nothing stays nothing stays"
+    name: "A Crosstown Breeze, Henry Taylor",
+    text: "A drift of wind when August wheeled brought back to mind an alfalfa field where green windrows bleached down to hay while storm clouds rose and rolled our way. With lighthearted strain in our pastoral agon we raced the rain with baler and wagon, driving each other to hold the turn out of the weather and into the barn. A nostalgic pause claims we saved it all, but I’ve known the loss of the lifelong haul; now gray concrete and electric light wear on my feet and dull my sight. So I keep asking, as I stand here, my cheek still basking in that trick of air, would I live that life if I had the chance, or is it enough to have been there once? "
   },
+  
   Thunderstorm: {
     name: "Break",
     text: "flash break flash"
@@ -126,7 +127,7 @@ function updateUI(weatherType, lat, lon) {
   contentEl.textContent = poem.text;
 
   // 更新 weather
-  weatherEl.textContent = `(${weatherType})`;
+  weatherEl.textContent = `${weatherType}`;
 
   // 🔥 更新城市（异步）
   getCityName(lat, lon).then((city) => {
