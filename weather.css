@@ -10,8 +10,9 @@
 
   --meta-gap: 60px;
 
-  --content-top: 120px;
-  --content-left: 220px;
+  --content-top: 50px;
+  --content-left: 50px;
+  --content-right: 50px;
 
   --meta-font: 13px;
   --poem-name-font: 14px;
@@ -23,6 +24,7 @@ body {
   margin: 0;
   background: var(--bg);
   font-family: 'Courier New', Courier, monospace;
+  margin:0 ;
 }
 
 /* PAGE */
@@ -58,12 +60,14 @@ body {
   position: absolute;
   left: var(--left-margin);
   top: 50%;
+  transform: translateY(-50%) rotate(180deg);
 
-  transform: translateY(-50%) rotate(-90deg);
-  transform-origin: left center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 
   color: var(--blue);
   font-size: var(--poem-name-font);
+  white-space: nowrap;
 }
 
 /* =========================
@@ -74,7 +78,9 @@ body {
   position: absolute;
   top: var(--content-top);
   left: var(--content-left);
+  right: var(--content-right);
 
   font-size: var(--content-font);
   color: var(--accent);
+  line-height: 1.6;
 }
