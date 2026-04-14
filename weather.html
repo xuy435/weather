@@ -1,32 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="weather.css">
-    <script src="weather.js"defer ></script>
-    <title>Weather</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="weather.css">
+  <script src="weather.js" defer></script>
+  <title>Weather</title>
 </head>
+
 <body>
   <div class="page">
 
-    <!-- TOP META -->
     <div class="top-meta">
-      <span id="location">Location</span>
-      <span id="time">9:18PM</span>
-      <span id="weather">Weather</span>
+      <button id="locationBtn">New York</button>
+      <span id="time"></span>
+      <button id="weatherBtn">Heavy Rain</button>
     </div>
 
-    <!-- LEFT POEM NAME -->
-    <div class="poem-name" id="poemName">
-      Poem name
+    <div id="weatherDropdown" class="dropdown hidden"></div>
+    <div id="cityInput" class="dropdown hidden">
+      <input id="cityField" placeholder="Enter city..." />
     </div>
 
-    <!-- CONTENT -->
-    <div class="content" id="content">
-      This will be a poem
-    </div>
+    <div class="content" id="content"></div>
 
   </div>
+
+  <!-- ABOUT BUTTON -->
+<div id="aboutBtn">?</div>
+
+<!-- ABOUT CARD -->
+<div id="aboutCard" class="hidden">
+  <div class="about-inner">
+    <p>
+      ABOUT
+<br>
+<br>
+This website explores weather as a dynamic system—where text, motion, and atmosphere shift based on real-time conditions.
+<br>
+<br>
+Click on the location to enter a city you’d like to explore
+(format: City, Country)
+<br>
+<br>
+Click on the weather label to cycle through different atmospheric states.
+<br>
+<br>
+The location and weather displayed reflect real-world data, continuously shaping the experience.
+<br>
+<br>
+<br>
+This project is still in progress and will continue to evolve.
+    </p>
+  </div>
+</div>
+
 </body>
 </html>

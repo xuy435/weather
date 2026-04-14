@@ -1,13 +1,9 @@
 :root {
   --bg: #f3f3f3;
   --text: #6c6258;
-  --blue: #2f6fff;
-  --accent: #e0a800;
+  --accent: #60bcc9;
 
-  /* spacing system */
   --top-margin: 20px;
-  --left-margin: 20px;
-
   --meta-gap: 60px;
 
   --content-top: 50px;
@@ -15,7 +11,6 @@
   --content-right: 50px;
 
   --meta-font: 13px;
-  --poem-name-font: 14px;
   --content-font: 18px;
 }
 
@@ -24,7 +19,6 @@ body {
   margin: 0;
   background: var(--bg);
   font-family: 'Courier New', Courier, monospace;
-  margin:0 ;
 }
 
 /* PAGE */
@@ -34,53 +28,138 @@ body {
   height: 100vh;
 }
 
-/* =========================
-   TOP META（横排）
-========================= */
-
+/* 🔥 FIX：title 固定 */
 .top-meta {
-  position: absolute;
+  position: fixed;
   top: var(--top-margin);
   left: 50%;
-
   transform: translateX(-50%);
-
   display: flex;
   gap: var(--meta-gap);
-
   font-size: var(--meta-font);
   color: var(--text);
+  z-index: 1000;
 }
 
-/* =========================
-   LEFT POEM NAME
-========================= */
-
-.poem-name {
-  position: absolute;
-  left: var(--left-margin);
-  top: 50%;
-  transform: translateY(-50%) rotate(180deg);
-
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-
-  color: var(--blue);
-  font-size: var(--poem-name-font);
-  white-space: nowrap;
-}
-
-/* =========================
-   CONTENT
-========================= */
-
+/* CONTENT = 物理世界 */
 .content {
   position: absolute;
   top: var(--content-top);
   left: var(--content-left);
   right: var(--content-right);
+  bottom: 30px;
+
+  overflow: hidden;
 
   font-size: var(--content-font);
   color: var(--accent);
-  line-height: 1.6;
+}
+
+/* 🔥 FIX：去掉 padding（避免卡住） */
+.phrase {
+  position: absolute;
+  left: 0;
+  top: 0;
+
+  display: inline-block;
+  white-space: nowrap;
+
+  font-size: 18px;
+  will-change: transform;
+  transition: opacity 1s linear;
+}
+
+/* BUTTON */
+.top-meta button {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* DROPDOWN */
+.dropdown {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-size: 13px;
+  z-index: 999;
+}
+
+.dropdown.hidden {
+  display: none;
+}
+
+.dropdown div {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.dropdown div:hover {
+  background: #eee;
+}
+
+/* INPUT */
+#cityField {
+  border: none;
+  outline: none;
+  font-family: inherit;
+}
+
+/* ABOUT BUTTON */
+
+#aboutBtn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text);
+  z-index: 999;
+}
+
+/* ABOUT CARD */
+
+#aboutCard {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+
+  width: 500px; /* 你要50px太小读不了，我帮你调合理一点 */
+  background: var(--bg);
+
+  padding: 20px;
+  box-sizing: border-box;
+
+  border: 1px solid rgba(0,0,0,0.1);
+
+  opacity: 0;
+  transform: translateX(40px);
+
+  transition: all 0.4s ease;
+  z-index: 998;
+}
+
+/* visible 状态 */
+
+#aboutCard.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* hidden（默认） */
+
+.hidden {
+  pointer-events: none;
+}
+
+#aboutCard {
+  backdrop-filter: blur(6px);
 }
