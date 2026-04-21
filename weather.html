@@ -9,51 +9,90 @@
 </head>
 
 <body>
+  <!-- 月亮元素 — 夜间由 JS 控制显示/隐藏和位置 -->
+  <div id="moon"></div>
+
   <div class="page">
 
+    <!-- TOP BAR -->
     <div class="top-meta">
       <button id="locationBtn">New York</button>
       <span id="time"></span>
-      <button id="weatherBtn">Heavy Rain</button>
+      <button id="weatherBtn">—</button>
+      <button id="customModeBtn">Custom Mode</button>
     </div>
 
+    <!-- WEATHER DROPDOWN — 位置由 JS 动态设置在 weatherBtn 下方 -->
     <div id="weatherDropdown" class="dropdown hidden"></div>
-    <div id="cityInput" class="dropdown hidden">
-      <input id="cityField" placeholder="Enter city..." />
+
+    <!-- CITY INPUT PANEL — 位置由 JS 动态设置在 locationBtn 下方 -->
+    <div id="cityInput" class="dropdown hidden city-panel">
+      <label for="cityField">Search city</label>
+      <input id="cityField" placeholder="Enter city..." autocomplete="off" />
+      <div id="citySuggestions" class="suggestions hidden"></div>
+      <label for="customTextField">Custom animated text</label>
+      <input id="customTextField" placeholder="Type your own phrase..." maxlength="80" />
+      <button id="addCustomTextBtn" type="button">Add text</button>
     </div>
 
+    <!-- 动画文字区域 -->
     <div class="content" id="content"></div>
 
+    <!--
+      CUSTOM MODE SLIDER PANEL — 右下角
+      三组 slider：Type / Level / Time
+      weatherTypeSlider max="3" 对应 JS weatherTypeOrder 的 4 个选项（0–3）
+      timeSlider max="1439" 对应 00:00–23:59
+    -->
+    <aside id="customControls" class="hidden">
+      <div class="panel-title">Custom</div>
+
+      <!-- Type slider -->
+      <div class="control-group">
+        <label for="weatherTypeSlider">Type</label>
+        <input id="weatherTypeSlider" type="range" min="0" max="3" step="1" value="0" />
+        <div id="weatherTypeValue">Clear / Sunny</div>
+      </div>
+
+      <!-- Level slider -->
+      <div class="control-group">
+        <label for="weatherLevelSlider">Level</label>
+        <input id="weatherLevelSlider" type="range" min="1" max="3" step="1" value="2" />
+        <div id="weatherLevelValue">Medium</div>
+      </div>
+
+      <!-- Time slider — 拖动模拟一天中不同时刻的背景/月亮/太阳位置
+           不影响天气类型 -->
+      <div class="control-group">
+        <label for="timeSlider">Time</label>
+        <input id="timeSlider" type="range" min="0" max="1439" step="1" value="720" />
+        <div id="timeSliderValue">12:00</div>
+      </div>
+    </aside>
+
   </div>
 
-  <!-- ABOUT BUTTON -->
-<div id="aboutBtn">?</div>
+  <!-- ABOUT 按钮 -->
+  <div id="aboutBtn">?</div>
 
-<!-- ABOUT CARD -->
-<div id="aboutCard" class="hidden">
-  <div class="about-inner">
-    <p>
-      ABOUT
-<br>
-<br>
-This website explores weather as a dynamic system—where text, motion, and atmosphere shift based on real-time conditions.
-<br>
-<br>
-Click on the location to enter a city you’d like to explore
-(format: City, Country)
-<br>
-<br>
-Click on the weather label to cycle through different atmospheric states.
-<br>
-<br>
-The location and weather displayed reflect real-world data, continuously shaping the experience.
-<br>
-<br>
-<br>
-This project is still in progress and will continue to evolve.
-    </p>
+  <!-- ABOUT CARD — 点击外部关闭 -->
+  <div id="aboutCard" class="hidden">
+    <div class="about-inner">
+      <p>
+        ABOUT
+        <br><br>
+        This website explores weather as a dynamic system — where text, motion, and atmosphere shift based on real-time conditions.
+        <br><br>
+        Click on the location to enter a city you'd like to explore (format: City, Country).
+        <br><br>
+        Click on the weather label to browse different atmospheric states.
+        <br><br>
+        The location and weather displayed reflect real-world data, continuously shaping the experience.
+        <br><br>
+        This project is still in progress and will continue to evolve.
+      </p>
+    </div>
   </div>
-</div>
 
 </body>
 </html>

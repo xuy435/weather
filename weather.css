@@ -1,165 +1,350 @@
+/* ============================================================
+   DESIGN TOKENS
+   调整颜色、字体大小、间距等全局变量在这里
+   ============================================================ */
 :root {
   --bg: #f3f3f3;
   --text: #6c6258;
   --accent: #60bcc9;
-
-  --top-margin: 20px;
-  --meta-gap: 60px;
-
+  --page-padding: 30px;
   --content-top: 50px;
-  --content-left: 50px;
-  --content-right: 50px;
-
   --meta-font: 13px;
   --content-font: 18px;
+
+  /* 夜间模式动态变量 — 由 JS updateDayNightVisuals() 更新
+     白天默认值在这里，夜间值由 JS 覆盖 */
+  --panel-bg: #ffffff;          /* 弹窗/input 背景 */
+  --panel-text: #6c6258;        /* 弹窗文字颜色 */
+  --panel-border: rgba(108, 98, 88, 0.2);   /* 弹窗边框 */
+  --input-bg: #ffffff;          /* input 框背景 */
+  --input-text: #3f362e;        /* input 文字 */
+  --label-text: #6b6056;        /* label 文字 */
 }
 
-/* BASE */
+/* ============================================================
+   BASE — 全站去掉圆角
+   如需某处恢复圆角，单独用 !important 覆盖
+   ============================================================ */
+* {
+  box-sizing: border-box;
+  border-radius: 0 !important;
+}
+
 body {
   margin: 0;
+  /* 背景色由 JS updateDayNightVisuals() 动态控制 */
   background: var(--bg);
   font-family: 'Courier New', Courier, monospace;
+  transition: background 2s ease;  /* 背景色渐变时长，可调 */
 }
 
-/* PAGE */
+/* ============================================================
+   PAGE
+   ============================================================ */
 .page {
   position: relative;
   width: 100vw;
   height: 100vh;
+  overflow: hidden;
 }
 
-/* 🔥 FIX：title 固定 */
+/* ============================================================
+   MOON — 月亮元素
+   纯 CSS 圆形，颜色/大小可在这里调整
+   位置由 JS getMoonPosition() 动态设置
+   ============================================================ */
+#moon {
+  position: fixed;
+  width: 40px;     /* 月亮大小，可调 */
+  height: 40px;
+  background: #d4cfc8;   /* 月亮颜色，可调 */
+  /* 用 box-shadow 模拟月牙（内阴影遮住一部分形成新月形）
+     如需满月，删除 box-shadow 这行 */
+  box-shadow: inset -6px 2px 0 0 rgba(14, 26, 46, 0.85);
+  z-index: 0;
+  pointer-events: none;
+  display: none;  /* 初始隐藏，由 JS 控制显示 */
+  transition: opacity 1.5s ease;
+  /* 注意：border-radius 被全局 !important 覆盖，需要手动还原成圆形 */
+  border-radius: 50% !important;
+}
+
+/* ============================================================
+   TOP META BAR
+   ============================================================ */
 .top-meta {
   position: fixed;
-  top: var(--top-margin);
+  top: var(--page-padding);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: var(--meta-gap);
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
   font-size: var(--meta-font);
   color: var(--text);
   z-index: 1000;
+  max-width: calc(100vw - 40px);
+  padding: 0 10px;
 }
 
-/* CONTENT = 物理世界 */
+/* ============================================================
+   TOP BAR 按钮 — 默认纯文字，hover 上移 + 边框
+   ============================================================ */
+.top-meta button {
+  background: none;
+  border: 1px solid transparent;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.22s ease, transform 0.22s ease;
+  white-space: nowrap;
+  font-weight: normal;
+  box-shadow: none;
+}
+
+.top-meta button:hover {
+  border-color: rgba(108, 98, 88, 0.35);
+  transform: translateY(-2px);
+}
+
+#customModeBtn.active {
+  border-color: rgba(108, 98, 88, 0.35);
+  color: var(--text);
+}
+
+/* ============================================================
+   CONTENT AREA
+   ============================================================ */
 .content {
   position: absolute;
   top: var(--content-top);
-  left: var(--content-left);
-  right: var(--content-right);
-  bottom: 30px;
-
+  left: var(--page-padding);
+  right: var(--page-padding);
+  bottom: var(--page-padding);
   overflow: hidden;
-
   font-size: var(--content-font);
   color: var(--accent);
 }
 
-/* 🔥 FIX：去掉 padding（避免卡住） */
+/* ============================================================
+   PHRASE — 飘动文字
+   ============================================================ */
 .phrase {
   position: absolute;
-  left: 0;
-  top: 0;
-
+  left: 0; top: 0;
   display: inline-block;
   white-space: nowrap;
-
   font-size: 18px;
   will-change: transform;
   transition: opacity 1s linear;
 }
 
-/* BUTTON */
-.top-meta button {
-  background: none;
-  border: none;
-  font-family: inherit;
-  font-size: inherit;
+/* hover/tap 停住状态 — 棕色，去圆角 */
+.phrase.readable {
+  background: rgba(255, 255, 255, 0.78);
+  padding: 3px 8px;
   color: var(--text);
-  cursor: pointer;
+  letter-spacing: 0.2px;
 }
 
-/* DROPDOWN */
+/* ============================================================
+   DROPDOWN
+   ============================================================ */
 .dropdown {
   position: fixed;
-  top: 50px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
   padding: 10px;
   font-size: 13px;
   z-index: 999;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
+.dropdown.hidden { display: none; }
+.dropdown div { padding: 6px 10px; cursor: pointer; }
+.dropdown div:hover { background: rgba(108, 98, 88, 0.08); }
 
-.dropdown.hidden {
-  display: none;
-}
+/* ============================================================
+   CITY INPUT PANEL
+   ============================================================ */
+.city-panel { display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 32px)); }
+.city-panel label { color: var(--label-text); font-size: 12px; }
 
-.dropdown div {
-  padding: 4px 8px;
-  cursor: pointer;
-}
-
-.dropdown div:hover {
-  background: #eee;
-}
-
-/* INPUT */
-#cityField {
-  border: none;
+#cityField, #customTextField {
+  border: 1px solid var(--panel-border);
   outline: none;
   font-family: inherit;
+  font-size: 13px;
+  padding: 8px;
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--input-text);
 }
 
-/* ABOUT BUTTON */
-
-#aboutBtn {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-
+#addCustomTextBtn {
+  border: 1px solid rgba(108, 98, 88, 0.25);
+  padding: 8px 10px;
+  font-family: inherit;
   cursor: pointer;
-  font-size: 16px;
+  background: rgba(96, 188, 201, 0.14);
+  transition: background 0.2s ease;
+}
+#addCustomTextBtn:hover { background: rgba(96, 188, 201, 0.26); }
+
+.suggestions { border: 1px solid var(--panel-border); overflow: hidden; background: var(--panel-bg); max-height: 180px; overflow-y: auto; }
+.suggestions.hidden { display: none; }
+.suggestion-item { padding: 8px; cursor: pointer; }
+.suggestion-item:hover { background: rgba(96, 188, 201, 0.16); }
+
+/* ============================================================
+   CUSTOM MODE PANEL — 右下角
+   包含三组 slider：Type / Level / Time
+   ============================================================ */
+#customControls {
+  position: fixed;
+  bottom: var(--page-padding);
+  right: var(--page-padding);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 20px;
+  padding: 14px 18px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1001;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+#customControls label {
+  font-size: 10px;
+  color: #6b6056;
+  text-align: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* 竖向 slider */
+#customControls input[type="range"] {
+  width: 18px;
+  height: 100px;
+  padding: 0;
+  margin: 0 auto;
+  display: block;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  cursor: pointer;
+}
+
+/* slider 轨道/滑块颜色 — 白天灰色，夜间深蓝调
+   --slider-track 和 --slider-thumb 由 JS 动态设置 */
+#customControls input[type="range"]::-webkit-slider-runnable-track { width: 3px; height: 100%; background: var(--slider-track, #c8bfb6); }
+#customControls input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-left: -5.5px; background: var(--slider-thumb, #a69b93); border: 0; }
+#customControls input[type="range"]::-moz-range-track { width: 3px; height: 100%; background: var(--slider-track, #c8bfb6); }
+#customControls input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; background: var(--slider-thumb, #a69b93); }
+
+/* slider 当前值 */
+#weatherTypeValue, #weatherLevelValue, #timeSliderValue {
+  font-size: 10px;
+  color: #7aaec0;
+  text-align: center;
+  min-height: 13px;
+  white-space: nowrap;
+}
+
+.panel-title {
+  font-size: 10px;
+  color: #5f554c;
+  font-weight: 700;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   ABOUT 按钮
+   ============================================================ */
+#aboutBtn {
+  position: fixed;
+  top: var(--page-padding);
+  right: var(--page-padding);
+  cursor: pointer;
+  font-size: 14px;
   color: var(--text);
-  z-index: 999;
+  z-index: 1002;
+  user-select: none;
+  transition: opacity 0.2s ease;
+  background: none;
+  border: none;
+  font-family: inherit;
+  padding: 2px 4px;
+  line-height: 1;
 }
+#aboutBtn:hover { opacity: 0.6; }
+#aboutBtn.hidden-when-open { opacity: 0; pointer-events: none; }
 
-/* ABOUT CARD */
-
+/* ============================================================
+   ABOUT CARD
+   ============================================================ */
 #aboutCard {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-
-  width: 500px; /* 你要50px太小读不了，我帮你调合理一点 */
-  background: var(--bg);
-
-  padding: 20px;
-  box-sizing: border-box;
-
-  border: 1px solid rgba(0,0,0,0.1);
-
+  position: fixed;
+  top: calc(var(--page-padding) + 28px);
+  right: var(--page-padding);
+  width: min(420px, calc(100vw - 32px));
+  background: var(--panel-bg);
+  padding: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   opacity: 0;
-  transform: translateX(40px);
-
-  transition: all 0.4s ease;
+  transform: translateX(16px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
   z-index: 998;
-}
-
-/* visible 状态 */
-
-#aboutCard.show {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* hidden（默认） */
-
-.hidden {
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   pointer-events: none;
 }
+#aboutCard.show { opacity: 1; transform: translateX(0); pointer-events: auto; }
 
-#aboutCard {
-  backdrop-filter: blur(6px);
+.about-inner { font-size: 13px; color: var(--panel-text); line-height: 1.75; }
+.about-inner p { margin: 0; }
+
+/* ============================================================
+   UTILITY
+   ============================================================ */
+.hidden { display: none !important; pointer-events: none; }
+
+.top-link { position: relative; cursor: pointer; }
+.top-link::after { content: ""; position: absolute; left: 0; bottom: -2px; width: 0%; height: 1px; background: var(--text); transition: width 0.25s ease; }
+.top-link:hover::after { width: 100%; }
+
+/* ============================================================
+   MOBILE (max-width: 600px)
+   ============================================================ */
+@media (max-width: 600px) {
+  :root { --page-padding: 16px; --content-top: 70px; --content-font: 15px; }
+  .top-meta { gap: 6px; }
+  .top-meta button { padding: 5px 10px; font-size: 12px; }
+  #time { width: 100%; text-align: center; font-size: 11px; opacity: 0.7; }
+  #customControls { right: 50%; transform: translateX(50%); }
+  .phrase { font-size: 14px; }
+}
+
+@media (max-width: 380px) {
+  .top-meta button { padding: 4px 8px; font-size: 11px; }
 }
