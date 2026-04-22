@@ -1199,6 +1199,10 @@ async function loadDefaultCity() {
 
 function locateUserAndLoad() {
   if (!navigator.geolocation) return loadDefaultCity();
+  /* 先加载纽约作为占位，获取到真实位置后替换
+     enableHighAccuracy: false 更快触发（手机网络定位），
+     timeout: 15000 给足够时间让用户授权 */
+  loadDefaultCity();
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
@@ -1209,10 +1213,10 @@ function locateUserAndLoad() {
         const cityName = place ? `${place.name}${place.country ? `, ${place.country}` : ""}` : "My Location";
         defaultLocation = { lat: latitude, lon: longitude, name: cityName };
         await fetchWeather(latitude, longitude, cityName);
-      } catch { await loadDefaultCity(); }
+      } catch { /* 已有纽约作为 fallback，静默失败 */ }
     },
-    () => loadDefaultCity(),
-    { enableHighAccuracy: true, timeout: 8000, maximumAge: 600000 }
+    () => { /* 用户拒绝或失败，保持纽约 */ },
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
 }
 
