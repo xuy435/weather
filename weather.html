@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="weather.css">
   <script src="weather.js" defer></script>
+  <link rel="icon" type="image/png" href="sunny.png">
   <title>Weather</title>
 </head>
 
@@ -19,7 +20,6 @@
       <button id="locationBtn">New York</button>
       <span id="time"></span>
       <button id="weatherBtn">—</button>
-      <button id="customModeBtn">Custom Mode</button>
     </div>
 
     <!-- WEATHER DROPDOWN — 位置由 JS 动态设置在 weatherBtn 下方 -->
@@ -45,7 +45,7 @@
       timeSlider max="1439" 对应 00:00–23:59
     -->
     <aside id="customControls" class="hidden">
-      <div class="panel-title">Custom</div>
+      <button id="customHideBtn">&#x2715;</button>
 
       <!-- Type slider -->
       <div class="control-group">
@@ -93,6 +93,9 @@
       </p>
     </div>
   </div>
+
+  <!-- Custom Mode 按钮 — 右下角 -->
+  <button id="customModeBtn">Custom Mode</button>
 
 </body>
 </html>

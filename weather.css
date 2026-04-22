@@ -111,10 +111,40 @@ body {
   transform: translateY(-2px);
 }
 
-#customModeBtn.active {
-  border-color: rgba(108, 98, 88, 0.35);
+/* Custom Mode 按钮 — 右下角固定 */
+#customModeBtn {
+  position: fixed;
+  bottom: var(--page-padding);
+  right: var(--page-padding);
+  z-index: 1002;
+  background: transparent;
+  border: 1px solid rgba(108, 98, 88, 0.25);
+  padding: 8px 16px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
   color: var(--text);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
+#customModeBtn:hover { opacity: 0.6; }
+
+/* × 关闭按钮 — controls box 右上角 */
+#customHideBtn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--panel-text);
+  cursor: pointer;
+  padding: 2px 6px;
+  opacity: 0.5;
+  transition: opacity 0.18s;
+  line-height: 1;
+}
+#customHideBtn:hover { opacity: 1; }
 
 /* ============================================================
    CONTENT AREA
@@ -208,11 +238,13 @@ body {
   position: fixed;
   bottom: var(--page-padding);
   right: var(--page-padding);
+  width: 240px;               /* 固定宽度，不随文字变化 */
   display: flex;
   flex-direction: row;
   align-items: flex-end;
-  gap: 20px;
-  padding: 14px 18px;
+  justify-content: space-around;
+  gap: 0;
+  padding: 36px 16px 16px 16px; /* 上方留出 × 按钮空间，四边一致 */
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   backdrop-filter: blur(4px);

@@ -22,6 +22,7 @@ const weatherLevelValue = document.getElementById("weatherLevelValue");
 const timeSlider = document.getElementById("timeSlider");
 const timeSliderValue = document.getElementById("timeSliderValue");
 const moonEl = document.getElementById("moon");
+const customHideBtn = document.getElementById("customHideBtn");
 
 /* ============================================================
    STATE
@@ -101,7 +102,7 @@ const weatherContent = {
    如需增减，同步修改 HTML weatherTypeSlider 的 max 值
    ============================================================ */
 const weatherTypeOrder = [
-  { label: "Clear / Sunny", type: "Clear",  level: "medium", modeType: "sunny" },
+  { label: "Clear", type: "Clear",  level: "medium", modeType: "sunny" },
   { label: "Wind",          type: "Wind",   level: "medium", modeType: "wind"  },
   { label: "Rain",          type: "Rain",   level: "medium", modeType: "rain"  },
   { label: "Snow",          type: "Snow",   level: "medium", modeType: "snow"  }
@@ -345,8 +346,15 @@ function applyTypeColor(weatherData) {
 function makeReadable(obj) {
   obj.el.classList.add("readable");
   obj.el.style.transform = `translate(${obj.x}px, ${Math.max(10, Math.min(world.height - obj.height - 10, obj.y))}px) rotate(0deg)`;
+  /* 风的 wavy spans 归零 */
+  if (obj._wavyUnits) obj._wavyUnits.forEach(s => s.style.top = "0px");
+  /* Clear dispersed spans 归位 */
+  if (obj._clearUnits) obj._clearUnits.forEach(s => { s.style.transform = "none"; s.style.transition = "transform 0.3s ease"; });
 }
-function clearReadable(obj) { obj.el.classList.remove("readable"); }
+function clearReadable(obj) {
+  obj.el.classList.remove("readable");
+  /* 离开后 wavy 会在下一帧自动恢复 */
+}
 
 function addInteraction(obj) {
   obj.paused = false; obj._hovering = false; obj._tapped = false;
@@ -425,6 +433,76 @@ function triggerRainSplash(obj, angle) {
   });
 }
 
+
+/* ============================================================
+   SNOW LETTER SPAWNER
+   每次 spawn 一个字母，记住所属 phrase 供 hover 显示
+   ============================================================ */
+function spawnSnowLetter(weatherData) {
+  const phrases = getPhraseSource(weatherData.type, weatherData.level);
+  if (!phrases.length) return null;
+
+  /* pick a random phrase, then a random non-space letter */
+  const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+  const letters = phrase.text.split("").filter(c => c !== " ");
+  if (!letters.length) return null;
+  const char = letters[Math.floor(Math.random() * letters.length)];
+
+  const el = document.createElement("div");
+  el.className = "phrase snow-letter";
+  el.textContent = char;
+  contentEl.appendChild(el);
+
+  const obj = {
+    el,
+    text: char,
+    _sourcePhrase: phrase.text,  /* for hover reveal */
+    weight: phrase.weight || 1,
+    x: Math.random() * Math.max(20, world.width - 20),
+    y: -20 - Math.random() * 60,
+    vx: 0, vy: 0,
+    waveSeed: Math.random() * 1000,
+    _snowSpeedOffset: Math.random() * 0.15, /* very small range: 0.9–1.05 */
+    _snowFadeY: 0.80 + Math.random() * 0.10, /* fade starts 80–90% vh */
+    type: "phrase", paused: false, width: 0, height: 0,
+    _dead: false
+  };
+
+  /* hover: show full phrase */
+  obj.el.addEventListener("mouseenter", () => {
+    if (isTouchDevice) return;
+    obj.paused = true;
+    obj.el.textContent = obj._sourcePhrase;
+    obj.el.classList.add("readable");
+    activeFrozen = obj;
+  });
+  obj.el.addEventListener("mouseleave", () => {
+    if (isTouchDevice) return;
+    obj.paused = false;
+    obj.el.textContent = char;
+    obj.el.classList.remove("readable");
+    if (activeFrozen === obj) activeFrozen = null;
+  });
+  obj.el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    obj.paused = !obj.paused;
+    if (obj.paused) {
+      obj.el.textContent = obj._sourcePhrase;
+      obj.el.classList.add("readable");
+      activeFrozen = obj;
+    } else {
+      obj.el.textContent = char;
+      obj.el.classList.remove("readable");
+      if (activeFrozen === obj) activeFrozen = null;
+    }
+  });
+
+  measureObject(obj);
+  obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
+  phraseObjects.push(obj);
+  return obj;
+}
+
 function clearScene() {
   cancelAnimationFrame(animationFrameId);
   phraseObjects.forEach((obj) => obj.el?.remove());
@@ -453,20 +531,26 @@ function buildPhraseObjects(weatherData) {
   objects.forEach((obj, idx) => {
     measureObject(obj);
     if (weatherData.type === "Rain") {
-      obj.rainAngle = 15 + Math.random() * 7;   /* 8–15° 更垂直，可调 */
+      obj.rainAngle = 8 + Math.random() * 7;   /* 8–15° 更垂直，可调 */
       obj.x = Math.random() * Math.max(20, world.width - obj.width); obj.y = -Math.random() * 180;
     } else if (weatherData.type === "Snow") {
-      obj.x = Math.random() * Math.max(20, world.width - obj.width); obj.y = -Math.random() * 180;
+      /* Snow letters all spawned dynamically — skip init here */
+      obj.x = 0; obj.y = -999;
     } else if (weatherData.type === "Wind") {
       obj.x = Math.random() * Math.max(20, world.width - obj.width);
       obj.y = 70 + Math.random() * Math.max(40, world.height - 160); obj.vx = 0.8 + Math.random() * 1.2;
     } else if (weatherData.type === "Clear") {
-      const origin = getSunOrigin();
-      obj.x = origin.x + (Math.random() - 0.5) * 20; obj.y = origin.y + (Math.random() - 0.5) * 20;
-      /* 均匀分配扩散角度，覆盖全圆 */
-      obj.spreadAngle = (idx / objects.length) * Math.PI * 2 + Math.random() * 0.3;
+      /* 从屏幕四边随机位置飘入 */
+      const edge = Math.floor(Math.random() * 4);
+      if (edge === 0) { obj.x = Math.random() * world.width; obj.y = -30; }       /* 上 */
+      else if (edge === 1) { obj.x = world.width + 30; obj.y = Math.random() * world.height; } /* 右 */
+      else if (edge === 2) { obj.x = Math.random() * world.width; obj.y = world.height + 30; } /* 下 */
+      else { obj.x = -30; obj.y = Math.random() * world.height; }                  /* 左 */
+      /* 向屏幕中心方向漂移的角度 */
+      const cx = world.width / 2, cy = world.height / 2;
+      obj.spreadAngle = Math.atan2(cy - obj.y, cx - obj.x) + (Math.random() - 0.5) * 0.8;
     } else if (weatherData.type === "Cloudy") {
-      const origin = getSunOrigin();
+      const origin = getSunOrigin(simulatedMinutes);
       obj.x = origin.x + (Math.random() - 0.5) * 34; obj.y = origin.y + (Math.random() - 0.5) * 34;
     } else if (weatherData.type === "Night") {
       obj.x = Math.random() * Math.max(20, world.width - obj.width);
@@ -478,6 +562,9 @@ function buildPhraseObjects(weatherData) {
 }
 
 function spawnDynamic(weatherData) {
+  /* Snow has its own letter-based spawner */
+  if (weatherData.type === "Snow") { spawnSnowLetter(weatherData); return; }
+
   const phrases = getPhraseSource(weatherData.type, weatherData.level);
   if (!phrases.length) return;
   const p = phrases[Math.floor(Math.random() * phrases.length)];
@@ -489,13 +576,43 @@ function spawnDynamic(weatherData) {
   } else if (weatherData.type === "Snow") {
     obj.x = Math.random() * Math.max(20, world.width - obj.width); obj.y = -obj.height - 20;
   } else if (weatherData.type === "Wind") {
-    obj.x = -obj.width - 20; obj.y = 70 + Math.random() * Math.max(40, world.height - 170); obj.vx = 0.8 + Math.random() * 1.1;
+    /* 每个文字分配一条参数化弧线路径
+       _windT   = 路径进度 0→1
+       _windArc = 弧线参数集合 */
+    const wlevel = weatherData.level;
+    const speed  = wlevel === "light" ? 0.0016 : wlevel === "medium" ? 0.0036 : 0.0064;
+    /* 弧线起点在屏幕左侧或上/下边缘 */
+    const startSide = wlevel === "heavy" ? Math.floor(Math.random() * 3) : 0;
+    let sx, sy;
+    if (startSide === 0) { sx = -0.1; sy = 0.1 + Math.random() * 0.8; }
+    else if (startSide === 1) { sx = Math.random(); sy = -0.05; }
+    else { sx = Math.random(); sy = 1.05; }
+    /* 控制点决定弧线弯曲方向和幅度 */
+    const curvature = wlevel === "light" ? 0.15 : wlevel === "medium" ? 0.32 : 0.55;
+    const cx1 = sx + 0.3 + (Math.random() - 0.5) * curvature;
+    const cy1 = sy + (Math.random() - 0.5) * curvature * 2;
+    const cx2 = sx + 0.65 + (Math.random() - 0.5) * curvature;
+    const cy2 = 0.2 + Math.random() * 0.6 + (Math.random() - 0.5) * curvature;
+    const ex  = 1.1 + Math.random() * 0.2; /* 终点在右侧外 */
+    const ey  = 0.1 + Math.random() * 0.8;
+    obj._windArc = { sx, sy, cx1, cy1, cx2, cy2, ex, ey, speed };
+    obj._windT   = 0;
+    obj._windRot = 0;
+    obj._windRotV = (Math.random() - 0.5) * (wlevel === "heavy" ? 3 : wlevel === "medium" ? 1.2 : 0.3);
+    /* initial position */
+    obj.x = sx * world.width;
+    obj.y = sy * world.height;
   } else if (weatherData.type === "Clear") {
-    const origin = getSunOrigin();
-    obj.x = origin.x + (Math.random() - 0.5) * 10; obj.y = origin.y + (Math.random() - 0.5) * 10;
-    obj.spreadAngle = Math.random() * Math.PI * 2;
+    /* 从屏幕四边随机位置飘入 */
+    const edge = Math.floor(Math.random() * 4);
+    if (edge === 0) { obj.x = Math.random() * world.width; obj.y = -30; }
+    else if (edge === 1) { obj.x = world.width + 30; obj.y = Math.random() * world.height; }
+    else if (edge === 2) { obj.x = Math.random() * world.width; obj.y = world.height + 30; }
+    else { obj.x = -30; obj.y = Math.random() * world.height; }
+    const cx = world.width / 2, cy = world.height / 2;
+    obj.spreadAngle = Math.atan2(cy - obj.y, cx - obj.x) + (Math.random() - 0.5) * 0.8;
   } else if (weatherData.type === "Cloudy") {
-    const origin = getSunOrigin();
+    const origin = getSunOrigin(simulatedMinutes);
     obj.x = origin.x + (Math.random() - 0.5) * 25; obj.y = origin.y + (Math.random() - 0.5) * 25;
   } else if (weatherData.type === "Night") {
     obj.x = Math.random() * Math.max(20, world.width - obj.width); obj.y = -obj.height - 20;
@@ -521,7 +638,9 @@ function stepPhysics() {
   /* Rain spawn 间隔：floor 提高，防止中等雨累积过密
      light=500ms, medium=350ms, heavy=220ms  可在这里调 */
   if (type === "Rain")   spawnInterval = Math.max(220, (level === "light" ? 500 : level === "medium" ? 350 : 220) / rainForce);
-  if (type === "Snow")   spawnInterval = Math.max(120, (level === "light" ? 540 : level === "medium" ? 380 : 260) / snowForce);
+  /* Snow: 每次 spawn 一个字母（不是整行），密度由 level 控制
+     light=2000ms, medium=800ms, heavy=350ms */
+  if (type === "Snow")   spawnInterval = level === "light" ? 500 : level === "medium" ? 200 : 88;
   if (type === "Clear")  spawnInterval = Math.max(400, 1200 - intensity * 600);
   if (type === "Cloudy") spawnInterval = Math.max(320, 840  - intensity * 420);
   if (type === "Wind")   spawnInterval = Math.max(260, 1020 - intensity * 680);
@@ -560,43 +679,191 @@ function stepPhysics() {
       }
 
     } else if (type === "Wind") {
-      obj.x += (obj.vx || 1.4) * windForce;
-      obj.y += Math.sin(now / 500 + obj.x * 0.01) * (0.15 + intensity * 0.45);
-      if (obj.x > world.width + 60) {
-        obj.el.remove(); obj._dead = true; return;
+      if (!obj._windArc) { obj.el.remove(); obj._dead = true; return; }
+      const arc = obj._windArc;
+      /* Advance along path — heavier wind moves faster */
+      const speedMult = level === "light" ? 1.0 : level === "medium" ? 1.0 : 1.0;
+      obj._windT += arc.speed * speedMult;
+
+      /* Cubic bezier: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3 */
+      const t  = Math.min(obj._windT, 1);
+      const mt = 1 - t;
+      const bx = mt*mt*mt*arc.sx + 3*mt*mt*t*arc.cx1 + 3*mt*t*t*arc.cx2 + t*t*t*arc.ex;
+      const by = mt*mt*mt*arc.sy + 3*mt*mt*t*arc.cy1 + 3*mt*t*t*arc.cy2 + t*t*t*arc.ey;
+
+      /* tangent for rotation: derivative of bezier */
+      const dt = 0.01;
+      const t2 = Math.min(t + dt, 1), mt2 = 1 - t2;
+      const bx2 = mt2*mt2*mt2*arc.sx + 3*mt2*mt2*t2*arc.cx1 + 3*mt2*t2*t2*arc.cx2 + t2*t2*t2*arc.ex;
+      const by2 = mt2*mt2*mt2*arc.sy + 3*mt2*mt2*t2*arc.cy1 + 3*mt2*t2*t2*arc.cy2 + t2*t2*t2*arc.ey;
+      const tangentAngle = Math.atan2(by2 - by, bx2 - bx) * 180 / Math.PI;
+
+      /* extra wobble for heavy wind */
+      const wobble = level === "heavy"
+        ? Math.sin(now * 0.003 + obj.waveSeed) * 12
+        : level === "medium" ? Math.sin(now * 0.002 + obj.waveSeed) * 4 : 0;
+
+      obj.x = bx * world.width;
+      obj.y = by * world.height;
+
+      /* done: past end of path → delete */
+      if (obj._windT >= 1) { obj.el.remove(); obj._dead = true; return; }
+
+      /* rotation follows path tangent */
+      const rot = level === "heavy"
+        ? tangentAngle + wobble
+        : level === "medium" ? tangentAngle * 0.5 + wobble
+        : tangentAngle * 0.2;
+
+      obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px) rotate(${rot}deg)`;
+
+      /* ── Wavy text: per-word (light/medium) or per-letter (heavy) ──
+         Apply vertical offsets via CSS on child spans inside the phrase el */
+      if (!obj._wavyInit) {
+        obj._wavyInit = true;
+        if (level === "heavy") {
+          /* Split into individual letter spans */
+          const chars = obj.el.textContent;
+          obj.el.innerHTML = chars.split("").map((c, i) =>
+            c === " " ? " " : `<span class="wind-char" data-i="${i}" style="display:inline-block;position:relative">${c}</span>`
+          ).join("");
+        } else {
+          /* Split into word spans */
+          const words = obj.el.textContent.split(" ");
+          obj.el.innerHTML = words.map((w, i) =>
+            `<span class="wind-word" data-i="${i}" style="display:inline-block;position:relative">${w}</span>`
+          ).join(" ");
+        }
+        obj._wavyUnits = obj.el.querySelectorAll(level === "heavy" ? ".wind-char" : ".wind-word");
       }
-      obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px) rotate(0deg)`;
+
+      if (obj._wavyUnits) {
+        const amp   = level === "heavy" ? 14 : level === "medium" ? 5 : 3;  /* 浮动幅度 px，可调 */
+        const freq  = level === "heavy" ? 0.003 : 0.002;                     /* 浮动频率，可调 */
+        const phase = level === "heavy" ? 0.6 : 1.2;                         /* 相位差，越大越错开 */
+        obj._wavyUnits.forEach((span, i) => {
+          const offset = Math.sin(now * freq + obj.waveSeed + i * phase) * amp;
+          span.style.top = `${offset}px`;
+        });
+      }
 
     } else if (type === "Snow") {
-      obj.vy += (level === "heavy" ? 0.05 : 0.035) * obj.weight * snowForce;
-      obj.x  += Math.sin(now / 520 + obj.x * 0.02) * (0.2 + 0.35 * intensity);
-      obj.y  += obj.vy;
-      if (obj.y > world.height + 20) obj.y = -obj.height - 20;
+      /* Uniform slow fall — no speed variance
+         Gentle horizontal sway via sine wave */
+      const fallSpeed = 0.9 + obj._snowSpeedOffset; /* 可调：提高这个数字加快速度 */
+      obj.y += fallSpeed;
+      obj.x += Math.sin(now / 1800 + obj.waveSeed * 6.28) * 0.25;
+
+      /* Fade out between 80–90% vh (each letter has its own fade start) */
+      const fadeStart = obj._snowFadeY * world.height;
+      if (obj.y > fadeStart) {
+        const fadeRange = world.height * 0.1;
+        const opacity = Math.max(0, 1 - (obj.y - fadeStart) / fadeRange);
+        obj.el.style.opacity = String(opacity);
+        if (opacity <= 0) { obj.el.remove(); obj._dead = true; return; }
+      }
+
       obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 
     } else if (type === "Clear") {
-      /* 文字从 sunOrigin 角落向外 "游动"，叠加垂直方向的波浪
-         waveAmp  = 波浪幅度，数字越大越弯曲
-         waveFreq = 波浪频率，数字越大越密 */
-      const origin    = getSunOrigin(simulatedMinutes);
-      const waveAmp   = 8 + intensity * 12;
-      const waveFreq  = 0.0025 + intensity * 0.002;
-      const perpAngle = obj.spreadAngle + Math.PI / 2;
+      const origin = getSunOrigin(simulatedMinutes);
 
-      obj.x += Math.cos(obj.spreadAngle) * clearSpeed;
-      obj.y += Math.sin(obj.spreadAngle) * clearSpeed;
-      const wave = Math.sin(now * waveFreq + obj.waveSeed) * waveAmp;
-      const dispX = obj.x + Math.cos(perpAngle) * wave;
-      const dispY = obj.y + Math.sin(perpAngle) * wave;
+      if (level === "light") {
+        /* ── Light: 保持原有波浪游动 ── */
+        const waveAmp   = 8 + intensity * 12;
+        const waveFreq  = 0.0025 + intensity * 0.002;
+        const perpAngle = obj.spreadAngle + Math.PI / 2;
+        obj.x += Math.cos(obj.spreadAngle) * clearSpeed;
+        obj.y += Math.sin(obj.spreadAngle) * clearSpeed;
+        const wave = Math.sin(now * waveFreq + obj.waveSeed) * waveAmp;
+        const dispX = obj.x + Math.cos(perpAngle) * wave;
+        const dispY = obj.y + Math.sin(perpAngle) * wave;
+        if (dispX < -80 || dispX > world.width + 80 || dispY < -80 || dispY > world.height + 80) {
+          obj.x = origin.x + (Math.random() - 0.5) * 16;
+          obj.y = origin.y + (Math.random() - 0.5) * 16;
+          obj.spreadAngle = Math.random() * Math.PI * 2;
+          obj.waveSeed = Math.random() * 1000;
+        }
+        obj.el.style.transform = `translate(${dispX}px, ${dispY}px)`;
 
-      /* 超出屏幕时重置到 origin */
-      if (dispX < -80 || dispX > world.width + 80 || dispY < -80 || dispY > world.height + 80) {
-        obj.x = origin.x + (Math.random() - 0.5) * 16;
-        obj.y = origin.y + (Math.random() - 0.5) * 16;
-        obj.spreadAngle = Math.random() * Math.PI * 2;
-        obj.waveSeed = Math.random() * 1000;
+      } else {
+        /* ── Medium / Heavy: 出现 → 3s 后散开 → fade ──
+           _clearSpawnTime = 出现时间戳
+           _clearPhase: "whole" | "dispersing" | "fading"
+           _clearUnits: word 或 letter spans
+        */
+        if (!obj._clearSpawnTime) obj._clearSpawnTime = now;
+        const age = now - obj._clearSpawnTime;
+
+        /* 第一帧：拆分成 spans */
+        if (!obj._clearUnits) {
+          const splitBy = level === "heavy" ? "" : " ";  /* heavy=字母, medium=单词 */
+          let parts, joinStr;
+          if (level === "heavy") {
+            /* Split into chars but keep spaces as literal space between spans */
+            parts = obj.text.split("");
+            joinStr = "";
+          } else {
+            parts = obj.text.split(" ");
+            joinStr = " ";
+          }
+          obj.el.innerHTML = parts.map((p, i) =>
+            p === " "
+              ? " "
+              : `<span class="clear-unit" data-i="${i}" style="display:inline-block;position:relative;transition:none">${p}</span>`
+          ).join(joinStr);
+          obj._clearUnits = Array.from(obj.el.querySelectorAll(".clear-unit"));
+          /* 每个 unit 的散开向量（随机方向） */
+          obj._clearVectors = obj._clearUnits.map(() => {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.4 + Math.random() * 0.6;
+            return { dx: 0, dy: 0, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, origDx: 0, origDy: 0 };
+          });
+          obj._clearPhase = "whole";
+        }
+
+        /* 散开时间：3000ms 后开始 */
+        const disperseDelay = 3000;   /* 3s 后开始散开 */
+        /* 消失时间：8-12s 随机（每个 phrase 不同）
+           _clearFadeDelay 在第一帧设定，后续复用 */
+        if (!obj._clearFadeDelay) obj._clearFadeDelay = 8000 + Math.random() * 4000;
+        const fadeDelay = obj._clearFadeDelay;
+
+        if (age > disperseDelay && obj._clearPhase === "whole") {
+          obj._clearPhase = "dispersing";
+          obj._disperseStart = now;
+        }
+
+        if (obj._clearPhase === "dispersing" || obj._clearPhase === "fading") {
+          const dAge = now - obj._disperseStart;
+          /* units 各自飘走 */
+          obj._clearVectors.forEach((v, i) => {
+            v.dx += v.vx * 0.5;
+            v.dy += v.vy * 0.5;
+            obj._clearUnits[i].style.transform = `translate(${v.dx}px, ${v.dy}px)`;
+          });
+          /* fade 开始 */
+          if (age > fadeDelay) {
+            const fadeRange = 2000; /* 2s 渐隐 */
+            const opacity = Math.max(0, 1 - (age - fadeDelay) / fadeRange);
+            obj.el.style.opacity = String(opacity);
+            if (opacity <= 0) { obj.el.remove(); obj._dead = true; return; }
+          }
+        }
+
+        /* 整体仍保持从 origin 向外游动 */
+        obj.x += Math.cos(obj.spreadAngle) * clearSpeed * 0.5;
+        obj.y += Math.sin(obj.spreadAngle) * clearSpeed * 0.5;
+        const waveAmp  = 5;
+        const perpA    = obj.spreadAngle + Math.PI / 2;
+        const wave2    = Math.sin(now * 0.002 + obj.waveSeed) * waveAmp;
+        const dispX    = obj.x + Math.cos(perpA) * wave2;
+        const dispY    = obj.y + Math.sin(perpA) * wave2;
+        if (dispX < -120 || dispX > world.width + 120 || dispY < -120 || dispY > world.height + 120) {
+          obj.el.remove(); obj._dead = true; return;
+        }
+        obj.el.style.transform = `translate(${dispX}px, ${dispY}px)`;
       }
-      obj.el.style.transform = `translate(${dispX}px, ${dispY}px)`;
 
     } else if (type === "Cloudy") {
       const origin = getSunOrigin(simulatedMinutes);
@@ -662,7 +929,8 @@ function classifyWeather(data) {
    ============================================================ */
 function applyWeather(weatherData, cityName) {
   let effectiveData = weatherData;
-  if (isNight() && (weatherData.type === "Clear" || weatherData.type === "Cloudy")) {
+  /* Custom mode 时不覆盖天气类型，让用户自由选择 */
+  if (mode !== "custom" && isNight() && (weatherData.type === "Clear" || weatherData.type === "Cloudy")) {
     effectiveData = { type: "Night", level: weatherData.level || "medium", intensity: 0.4 };
   }
   currentAnimatedWeather = effectiveData;
@@ -828,13 +1096,13 @@ customTextField.addEventListener("keydown", (e) => { if (e.key === "Enter") addC
    ============================================================ */
 function setCustomMode(enabled) {
   mode = enabled ? "custom" : "api";
-  customModeBtn.classList.toggle("active", enabled);
   customControls.classList.toggle("hidden", !enabled);
+  /* 激活时隐藏按钮，关闭时恢复 */
+  customModeBtn.style.display = enabled ? "none" : "";
   if (!enabled) {
     simulatedMinutes = null;
     if (latestApiContext) applyWeather(latestApiContext.weatherData, latestApiContext.cityName);
   } else {
-    /* 仅同步 slider 显示，不重建场景 */
     syncCustomSliderDisplay();
   }
 }
@@ -865,6 +1133,7 @@ function applyCustomWeatherSelection() {
 }
 
 customModeBtn.addEventListener("click", () => setCustomMode(mode !== "custom"));
+if (customHideBtn) customHideBtn.addEventListener("click", () => setCustomMode(false));
 weatherTypeSlider.addEventListener("input", () => { if (mode === "custom") applyCustomWeatherSelection(); });
 weatherLevelSlider.addEventListener("input", () => { if (mode === "custom") applyCustomWeatherSelection(); });
 
