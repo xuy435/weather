@@ -15,10 +15,11 @@
 
   <div class="page">
 
-    <!-- TOP BAR -->
-    <div class="top-meta">
-      <button id="locationBtn">New York</button>
-      <span id="time"></span>
+    <!-- TOP BAR: three fixed elements, independent of each other -->
+    <button id="locationBtn">New York</button>
+    <span id="time"></span>
+    <div id="weatherGroup">
+      <button id="tempBtn" class="hidden">—</button>
       <button id="weatherBtn">—</button>
     </div>
 
@@ -65,8 +66,15 @@
            不影响天气类型 -->
       <div class="control-group">
         <label for="timeSlider">Time</label>
-        <input id="timeSlider" type="range" min="0" max="1439" step="1" value="720" />
+        <input id="timeSlider" type="range" min="0" max="1439" step="1" value="720" style="transform: scaleY(-1);" />
         <div id="timeSliderValue">12:00</div>
+      </div>
+
+      <!-- Temp slider -->
+      <div class="control-group">
+        <label for="tempSlider">Temp</label>
+        <input id="tempSlider" type="range" min="-10" max="40" step="1" value="20" />
+        <div id="tempSliderValue">20&deg;C</div>
       </div>
     </aside>
 

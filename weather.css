@@ -5,11 +5,11 @@
 :root {
   --bg: #f3f3f3;
   --text: #6c6258;
-  --accent: #60bcc9;
+  --accent: var(--text);
   --page-padding: 30px;
   --content-top: 50px;
-  --meta-font: 13px;
-  --content-font: 18px;
+  --meta-font: 13px;  /* already 13px */
+  --content-font: 13px;
 
   /* 夜间模式动态变量 — 由 JS updateDayNightVisuals() 更新
      白天默认值在这里，夜间值由 JS 覆盖 */
@@ -70,45 +70,86 @@ body {
 }
 
 /* ============================================================
-   TOP META BAR
+   TOP BAR — location 左 | time 正中 | weather 右
+   三者各自 fixed，互不干扰
    ============================================================ */
-.top-meta {
+.top-meta { display: none; }
+
+#locationBtn {
   position: fixed;
   top: var(--page-padding);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--meta-font);
-  color: var(--text);
+  left: var(--page-padding);
   z-index: 1000;
-  max-width: calc(100vw - 40px);
-  padding: 0 10px;
-}
-
-/* ============================================================
-   TOP BAR 按钮 — 默认纯文字，hover 上移 + 边框
-   ============================================================ */
-.top-meta button {
   background: none;
   border: 1px solid transparent;
   padding: 6px 14px;
   font-family: inherit;
-  font-size: inherit;
+  font-size: var(--meta-font);
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.22s ease, transform 0.22s ease;
   white-space: nowrap;
   font-weight: normal;
-  box-shadow: none;
+  transition: border-color 0.22s ease, transform 0.22s ease;
 }
-
-.top-meta button:hover {
+#locationBtn:hover {
   border-color: rgba(108, 98, 88, 0.35);
   transform: translateY(-2px);
+}
+
+#time {
+  position: fixed;
+  top: var(--page-padding);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  font-size: var(--meta-font);
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 6px 0;
+}
+
+/* Weather group — wraps tempBtn + weatherBtn as one hover box */
+#weatherGroup {
+  position: fixed;
+  top: var(--page-padding);
+  right: calc(var(--page-padding) + 22px);
+  z-index: 1000;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  border: 1px solid transparent;
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+#weatherGroup:hover {
+  border-color: rgba(108, 98, 88, 0.35);
+  transform: translateY(-2px);
+}
+
+#tempBtn {
+  background: none;
+  border: none;
+  padding: 6px 6px 6px 14px;
+  font-family: inherit;
+  font-size: var(--meta-font);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: normal;
+}
+
+#weatherBtn {
+  position: static;
+  background: none;
+  border: none;
+  padding: 6px 14px 6px 6px;
+  font-family: inherit;
+  font-size: var(--meta-font);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: normal;
 }
 
 /* Custom Mode 按钮 — 右下角固定 */
@@ -151,10 +192,10 @@ body {
    ============================================================ */
 .content {
   position: absolute;
-  top: var(--content-top);
-  left: var(--page-padding);
-  right: var(--page-padding);
-  bottom: var(--page-padding);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   overflow: hidden;
   font-size: var(--content-font);
   color: var(--accent);
@@ -168,14 +209,14 @@ body {
   left: 0; top: 0;
   display: inline-block;
   white-space: nowrap;
-  font-size: 18px;
+  font-size: 13px;
   will-change: transform;
   transition: opacity 1s linear;
 }
 
 /* hover/tap 停住状态 — 棕色，去圆角 */
 .phrase.readable {
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--panel-bg);
   padding: 3px 8px;
   color: var(--text);
   letter-spacing: 0.2px;
@@ -201,7 +242,7 @@ body {
 /* ============================================================
    CITY INPUT PANEL
    ============================================================ */
-.city-panel { display: flex; flex-direction: column; gap: 8px; width: min(320px, calc(100vw - 32px)); }
+.city-panel { display: flex; flex-direction: column; gap: 8px; width: 300px; }
 .city-panel label { color: var(--label-text); font-size: 12px; }
 
 #cityField, #customTextField {
@@ -261,7 +302,7 @@ body {
 
 #customControls label {
   font-size: 10px;
-  color: #6b6056;
+  color: var(--panel-text);
   text-align: center;
   line-height: 1;
   white-space: nowrap;
@@ -290,13 +331,17 @@ body {
 #customControls input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 0; background: var(--slider-thumb, #a69b93); }
 
 /* slider 当前值 */
-#weatherTypeValue, #weatherLevelValue, #timeSliderValue {
+#weatherTypeValue, #weatherLevelValue, #timeSliderValue, #tempSliderValue {
   font-size: 10px;
-  color: #7aaec0;
+  color: var(--panel-text);
   text-align: center;
   min-height: 13px;
   white-space: nowrap;
 }
+
+/* remove browser focus ring on sliders */
+#customControls input[type="range"]:focus { outline: none; }
+#customControls input[type="range"]:focus-visible { outline: none; }
 
 .panel-title {
   font-size: 10px;
@@ -315,16 +360,16 @@ body {
   top: var(--page-padding);
   right: var(--page-padding);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--meta-font);
   color: var(--text);
   z-index: 1002;
   user-select: none;
   transition: opacity 0.2s ease;
   background: none;
-  border: none;
+  border: 1px solid transparent;
   font-family: inherit;
-  padding: 2px 4px;
-  line-height: 1;
+  padding: 6px 4px;
+  line-height: inherit;
 }
 #aboutBtn:hover { opacity: 0.6; }
 #aboutBtn.hidden-when-open { opacity: 0; pointer-events: none; }
@@ -353,7 +398,7 @@ body {
 }
 #aboutCard.show { opacity: 1; transform: translateX(0); pointer-events: auto; }
 
-.about-inner { font-size: 13px; color: var(--panel-text); line-height: 1.75; }
+.about-inner { font-size: 13px; /* already 13px */ color: var(--panel-text); line-height: 1.75; }
 .about-inner p { margin: 0; }
 
 /* ============================================================

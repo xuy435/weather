@@ -12,6 +12,7 @@ const cityField = document.getElementById("cityField");
 const citySuggestions = document.getElementById("citySuggestions");
 const customTextField = document.getElementById("customTextField");
 const addCustomTextBtn = document.getElementById("addCustomTextBtn");
+const tempBtn  = document.getElementById("tempBtn");
 const aboutBtn = document.getElementById("aboutBtn");
 const aboutCard = document.getElementById("aboutCard");
 const customControls = document.getElementById("customControls");
@@ -21,6 +22,8 @@ const weatherLevelSlider = document.getElementById("weatherLevelSlider");
 const weatherLevelValue = document.getElementById("weatherLevelValue");
 const timeSlider = document.getElementById("timeSlider");
 const timeSliderValue = document.getElementById("timeSliderValue");
+const tempSlider = document.getElementById("tempSlider");
+const tempSliderValue = document.getElementById("tempSliderValue");
 const moonEl = document.getElementById("moon");
 const customHideBtn = document.getElementById("customHideBtn");
 
@@ -46,6 +49,13 @@ let defaultLocation = null;
 
 /* simulatedMinutes: null = 使用真实时间; 0–1439 = custom mode 时间覆盖 */
 let simulatedMinutes = null;
+
+/* simulatedTempC: null = 使用 API 温度; number = custom mode 温度覆盖 */
+let simulatedTempC = null;
+
+/* temperature state */
+let currentTempC = null;      /* raw °C value from API */
+let tempUnitIsCelsius = true;  /* toggle on click */
 
 /* ============================================================
    AUTOCOMPLETE FALLBACK
@@ -112,14 +122,16 @@ const weatherTypeOrder = [
    COLOR MAP
    如需调整颜色，在这里改 hex 值
    ============================================================ */
-const typeColors = {
-  sunny:   "#e05d38",
-  wind:    "#2f69c2",
-  rain:    "#188f77",
-  snow:    "#2f8f9f",
-  cloudy:  "#7a8fa6",
-  night:   "#7a9abf",  /* 夜间冷蓝色调 */
-  default: "#60bcc9"
+/* Two accent hues (as [h, s] for HSL) — lightness adjusted dynamically for contrast
+   Clear/Sunny uses warm pale yellow; all others use a cooler blue-teal hue */
+const typeAccentHSL = {
+  sunny:   [48,  85],   /* warm yellow */
+  wind:    [48,  85],   /* same yellow — only two colours site-wide */
+  rain:    [48,  85],
+  snow:    [48,  85],
+  cloudy:  [48,  85],
+  night:   [48,  85],
+  default: [48,  85],
 };
 
 const levelNames = { light: "Light", medium: "Medium", heavy: "Heavy" };
@@ -185,61 +197,129 @@ function getClearLevelByTime(minutes) {
 }
 
 /* ============================================================
+   TEMPERATURE → BACKGROUND COLOR
+   参考图调色板（只白天）：
+   ≥ 35°C  深橙    rgb(210, 120, 50)
+   28°C    暖橙    rgb(220, 155, 80)
+   22°C    暖黄白  rgb(225, 205, 160)
+   16°C    浅暖白  rgb(220, 215, 200)
+   10°C    浅冷白  rgb(210, 215, 220)
+    4°C    冷灰蓝  rgb(185, 200, 215)
+  ≤ −2°C  冷蓝白  rgb(170, 190, 215)
+   夜间：在此基础上向 rgb(10,18,35) 混合，nightFactor 越大越深
+   ============================================================ */
+function getTempBg(tempC) {
+  /* clamp */
+  const t = Math.max(-10, Math.min(40, tempC ?? 20));
+  /* 关键帧 [tempC, r, g, b] */
+  const stops = [
+    [-10, 160, 185, 220],
+    [  4, 185, 200, 215],
+    [ 10, 210, 215, 220],
+    [ 16, 220, 215, 200],
+    [ 22, 225, 205, 160],
+    [ 28, 220, 155,  80],
+    [ 35, 210, 120,  50],
+    [ 40, 200,  90,  35],
+  ];
+  let i = 0;
+  for (let k = 0; k < stops.length - 1; k++) {
+    if (t >= stops[k][0] && t <= stops[k+1][0]) { i = k; break; }
+    if (t > stops[stops.length-1][0]) { i = stops.length - 2; break; }
+  }
+  const a = stops[i], b = stops[i+1];
+  const f = (t - a[0]) / (b[0] - a[0]);
+  return [
+    Math.round(a[1] + (b[1]-a[1]) * f),
+    Math.round(a[2] + (b[2]-a[2]) * f),
+    Math.round(a[3] + (b[3]-a[3]) * f),
+  ];
+}
+
+/* 感知亮度 (0–255) */
+function perceivedLightness(r, g, b) {
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/* ============================================================
    DAY/NIGHT VISUALS — 每帧调用
-   背景色渐变 + 月亮位置
+   背景色 = 温度色 × 时间暗度
+   文字色 = 背景的动态对比色（保证可读）
    ============================================================ */
 function updateDayNightVisuals() {
   const minutes = getCurrentMinutes();
   const night   = isNight(minutes);
 
-  /* 渐变宽度（分钟），黎明/黄昏过渡时长 */
+  /* bgFactor: 0 = 最深夜, 1 = 正午白天
+     用单一连续公式，消除日出/日落处的跳变：
+     计算当前时刻距最近昼夜边界的有符号距离，
+     白天内部为正，夜间为负，再 smoothstep 映射到 0–1 */
   const TRANSITION = 60;
-  let bgFactor; /* 0 = 最深夜，1 = 最亮白天 */
-
-  if (night) {
-    /* 距最近日出/日落的分钟数（跨午夜正确处理）*/
-    const toSunrise  = minutes < SUNRISE_MIN ? SUNRISE_MIN - minutes : 1440 - minutes + SUNRISE_MIN;
-    const fromSunset = minutes > SUNSET_MIN  ? minutes - SUNSET_MIN  : 1440 - SUNSET_MIN + minutes;
-    const closest = Math.min(toSunrise, fromSunset);
-    bgFactor = 1 - Math.min(1, closest / TRANSITION);
+  let _distToBoundary;
+  if (minutes >= SUNRISE_MIN && minutes <= SUNSET_MIN) {
+    _distToBoundary = Math.min(minutes - SUNRISE_MIN, SUNSET_MIN - minutes);
+  } else if (minutes < SUNRISE_MIN) {
+    _distToBoundary = -(SUNRISE_MIN - minutes);
   } else {
-    const fromSunrise = minutes - SUNRISE_MIN;
-    const toSunset    = SUNSET_MIN - minutes;
-    bgFactor = Math.min(1, Math.min(fromSunrise, toSunset) / TRANSITION);
+    _distToBoundary = -(minutes - SUNSET_MIN);
   }
+  const _t = Math.max(0, Math.min(1, _distToBoundary / TRANSITION));
+  const bgFactor = _t * _t * (3 - 2 * _t);  /* smoothstep */
 
-  function lerp(a, b, t) { return Math.round(a + (b - a) * t); }
-  const dayBg   = [243, 243, 243];
-  const nightBg = [14,  26,  46 ];
-  document.body.style.background = `rgb(${lerp(nightBg[0],dayBg[0],bgFactor)},${lerp(nightBg[1],dayBg[1],bgFactor)},${lerp(nightBg[2],dayBg[2],bgFactor)})`;
+  /* 当前有效温度 */
+  const activeTemp = simulatedTempC !== null ? simulatedTempC : (currentTempC ?? 20);
 
-  /* 弹窗/panel 颜色随夜间模式变化
-     白天: 白色背景棕色文字; 夜间: 深蓝背景冷灰文字
-     如需调整夜间面板颜色，改这里的 nightPanel* 值 */
-  const nightPanelBg      = [20, 36, 60];    /* 深蓝面板背景 */
-  const nightPanelText    = [160, 180, 210];  /* 冷灰文字 */
-  const nightPanelBorder  = [40, 60, 90];     /* 深蓝边框 */
-  const dayPanelBg        = [255, 255, 255];
-  const dayPanelText      = [63, 54, 46];
-  const dayPanelBorder    = [108, 98, 88];
+  /* 白天温度色 */
+  const [dr, dg, db] = getTempBg(activeTemp);
+
+  /* 夜间底色（深蓝黑） */
+  const nr = 10, ng = 18, nb = 35;
+
+  /* 最终背景：白天色 × bgFactor 叠加夜间色 */
+  const br = Math.round(nr + (dr - nr) * bgFactor);
+  const bg = Math.round(ng + (dg - ng) * bgFactor);
+  const bb = Math.round(nb + (db - nb) * bgFactor);
+  document.body.style.background = `rgb(${br},${bg},${bb})`;
+
+  /* ── TWO-COLOUR CONTRAST SYSTEM ──
+     --text   : switches cleanly at lum=128 (no mid-tone blend = no grey mud)
+                dark bg  → near-white cool  rgb(220,228,238)  lum≈227
+                light bg → near-black warm  rgb(40,32,24)     lum≈33
+     --accent : warm yellow, two fixed values chosen for contrast
+                dark bg (lum<128) → bright yellow hsl(46,85%,72%) lum≈193
+                light bg (lum≥128)→ dark  gold   hsl(46,80%,34%) lum≈87
+     Both guarantee ≥65 perceived contrast units on any background. */
+  const lum = perceivedLightness(br, bg, bb);
+  /* --text: near-white on dark bg, near-black on light bg */
+  const textColor = lum < 128 ? "rgb(220,228,238)" : "rgb(35,28,18)";
+  /* --accent (animated phrases + weather label):
+     dark bg (lum<100): bright warm yellow rgb(244,216,123) — clearly visible on any dark/cool bg
+     light/mid bg (lum>=100): same near-black as text — yellow is unreadable on warm orange/beige */
+  const accentColor = lum < 100 ? "rgb(244,216,123)" : "rgb(35,28,18)";
 
   const root = document.documentElement;
-  root.style.setProperty('--panel-bg',     `rgb(${lerp(nightPanelBg[0],dayPanelBg[0],bgFactor)},${lerp(nightPanelBg[1],dayPanelBg[1],bgFactor)},${lerp(nightPanelBg[2],dayPanelBg[2],bgFactor)})`);
-  root.style.setProperty('--input-bg',     `rgb(${lerp(nightPanelBg[0],dayPanelBg[0],bgFactor)},${lerp(nightPanelBg[1],dayPanelBg[1],bgFactor)},${lerp(nightPanelBg[2],dayPanelBg[2],bgFactor)})`);
-  root.style.setProperty('--panel-text',   `rgb(${lerp(nightPanelText[0],dayPanelText[0],bgFactor)},${lerp(nightPanelText[1],dayPanelText[1],bgFactor)},${lerp(nightPanelText[2],dayPanelText[2],bgFactor)})`);
-  root.style.setProperty('--label-text',   `rgb(${lerp(nightPanelText[0],dayPanelText[0],bgFactor)},${lerp(nightPanelText[1],dayPanelText[1],bgFactor)},${lerp(nightPanelText[2],dayPanelText[2],bgFactor)})`);
-  root.style.setProperty('--input-text',   `rgb(${lerp(nightPanelText[0],dayPanelText[0],bgFactor)},${lerp(nightPanelText[1],dayPanelText[1],bgFactor)},${lerp(nightPanelText[2],dayPanelText[2],bgFactor)})`);
-  root.style.setProperty('--panel-border', `rgba(${lerp(nightPanelBorder[0],dayPanelBorder[0],bgFactor)},${lerp(nightPanelBorder[1],dayPanelBorder[1],bgFactor)},${lerp(nightPanelBorder[2],dayPanelBorder[2],bgFactor)},0.35)`);
-  /* slider 轨道/滑块颜色
-     夜间: 深蓝灰; 白天: 暖灰 */
-  const nightTrack = [50, 70, 100], dayTrack = [200, 191, 182];
-  const nightThumb = [80, 110, 150], dayThumb = [166, 155, 147];
-  root.style.setProperty('--slider-track', `rgb(${lerp(nightTrack[0],dayTrack[0],bgFactor)},${lerp(nightTrack[1],dayTrack[1],bgFactor)},${lerp(nightTrack[2],dayTrack[2],bgFactor)})`);
-  root.style.setProperty('--slider-thumb', `rgb(${lerp(nightThumb[0],dayThumb[0],bgFactor)},${lerp(nightThumb[1],dayThumb[1],bgFactor)},${lerp(nightThumb[2],dayThumb[2],bgFactor)})`);
-  /* top bar 文字颜色也跟着变 */
-  const nightTopText = [120, 150, 190];
-  const dayTopText   = [108, 98, 88];
-  root.style.setProperty('--text', `rgb(${lerp(nightTopText[0],dayTopText[0],bgFactor)},${lerp(nightTopText[1],dayTopText[1],bgFactor)},${lerp(nightTopText[2],dayTopText[2],bgFactor)})`);
+  root.style.setProperty('--text',   textColor);
+  root.style.setProperty('--accent', accentColor);
+  if (typeof weatherBtn !== 'undefined' && weatherBtn) weatherBtn.style.color = textColor;
+  if (typeof tempBtn    !== 'undefined' && tempBtn)    tempBtn.style.color    = textColor;
+  if (typeof contentEl  !== 'undefined' && contentEl)  contentEl.style.color  = accentColor;
+
+  /* panel/input 也跟着背景走，保持与背景的对比 */
+  /* panel 背景：白天略亮于页面（+12），夜间略暗（−6），在 bgFactor 之间平滑过渡，消除跳变 */
+  const panelLift = Math.round(-6 + bgFactor * 18);   /* −6 (深夜) → +12 (正午) */
+  const pbr = Math.min(255, Math.max(0, br + panelLift));
+  const pbg = Math.min(255, Math.max(0, bg + panelLift));
+  const pbb = Math.min(255, Math.max(0, bb + panelLift));
+  root.style.setProperty('--panel-bg',    `rgb(${pbr},${pbg},${pbb})`);
+  root.style.setProperty('--input-bg',    `rgb(${pbr},${pbg},${pbb})`);
+  root.style.setProperty('--panel-text',  textColor);
+  root.style.setProperty('--label-text',  textColor);
+  root.style.setProperty('--input-text',  textColor);
+  root.style.setProperty('--panel-border', lum < 128 ? 'rgba(220,228,238,0.30)' : 'rgba(40,32,24,0.30)');
+
+  /* slider 轨道/滑块跟随文字色调 */
+  root.style.setProperty('--slider-track', lum < 128 ? 'rgba(220,228,238,0.35)' : 'rgba(40,32,24,0.35)');
+  root.style.setProperty('--slider-thumb', lum < 128 ? 'rgba(220,228,238,0.70)' : 'rgba(40,32,24,0.70)');
 
   /* 月亮 */
   if (moonEl) {
@@ -337,10 +417,26 @@ function getColorKey(weatherData) {
   return "default";
 }
 
+/* ============================================================
+   TWO-COLOUR SYSTEM
+   The site uses exactly two colours at any time:
+   1. --text : the base readable text colour (dark on light bg, light on dark bg)
+   2. --accent: a pale warm yellow, lightness adjusted to stay readable on current bg
+   Both are set here and in updateDayNightVisuals.
+   ============================================================ */
 function applyTypeColor(weatherData) {
-  const color = typeColors[getColorKey(weatherData)] || typeColors.default;
+  /* mirror the same logic as updateDayNightVisuals so there's no 1-frame lag */
+  const bodyBg = document.body.style.background || "rgb(220,215,200)";
+  const m = bodyBg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  const bgLum = m ? perceivedLightness(+m[1],+m[2],+m[3]) : 180;
+  const color = bgLum < 100 ? "rgb(244,216,123)" : "rgb(35,28,18)";
   contentEl.style.color = color;
-  weatherBtn.style.color = color;
+  const bodyBg2 = document.body.style.background || 'rgb(220,215,200)';
+  const m2 = bodyBg2.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  const bgLum2 = m2 ? perceivedLightness(+m2[1],+m2[2],+m2[3]) : 180;
+  const topBarColor = bgLum2 < 128 ? 'rgb(220,228,238)' : 'rgb(35,28,18)';
+  weatherBtn.style.color = topBarColor;
+  if (tempBtn) tempBtn.style.color = topBarColor;
 }
 
 function makeReadable(obj) {
@@ -717,33 +813,34 @@ function stepPhysics() {
 
       obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px) rotate(${rot}deg)`;
 
-      /* ── Wavy text: per-word (light/medium) or per-letter (heavy) ──
-         Apply vertical offsets via CSS on child spans inside the phrase el */
+      /* ── Wavy text: ALL levels use per-letter spans with organic randomness ──
+         Each letter gets its own random amplitude, frequency, phase, and horizontal drift
+         light: subtle scatter | medium: letters break apart | heavy: chaotic */
       if (!obj._wavyInit) {
         obj._wavyInit = true;
-        if (level === "heavy") {
-          /* Split into individual letter spans */
-          const chars = obj.el.textContent;
-          obj.el.innerHTML = chars.split("").map((c, i) =>
-            c === " " ? " " : `<span class="wind-char" data-i="${i}" style="display:inline-block;position:relative">${c}</span>`
-          ).join("");
-        } else {
-          /* Split into word spans */
-          const words = obj.el.textContent.split(" ");
-          obj.el.innerHTML = words.map((w, i) =>
-            `<span class="wind-word" data-i="${i}" style="display:inline-block;position:relative">${w}</span>`
-          ).join(" ");
-        }
-        obj._wavyUnits = obj.el.querySelectorAll(level === "heavy" ? ".wind-char" : ".wind-word");
+        const chars = obj.el.textContent;
+        obj.el.innerHTML = chars.split("").map((c, i) =>
+          c === " " ? "&nbsp;" : `<span class="wind-char" data-i="${i}" style="display:inline-block;position:relative">${c}</span>`
+        ).join("");
+        obj._wavyUnits = obj.el.querySelectorAll(".wind-char");
+        /* per-letter randomised params for organic feel */
+        obj._wavyParams = Array.from(obj._wavyUnits).map(() => ({
+          vAmp:  (level === "heavy" ? 10 : level === "medium" ? 6 : 3) + Math.random() * (level === "heavy" ? 12 : level === "medium" ? 6 : 3),
+          vFreq: 0.0006 + Math.random() * (level === "heavy" ? 0.005 : level === "medium" ? 0.003 : 0.0015),
+          vPhase: Math.random() * Math.PI * 2,
+          hAmp:  level === "heavy" ? 0 : (level === "medium" ? 2 : 1) + Math.random() * (level === "medium" ? 4 : 2),
+          hFreq: 0.0004 + Math.random() * 0.0012,
+          hPhase: Math.random() * Math.PI * 2,
+        }));
       }
 
-      if (obj._wavyUnits) {
-        const amp   = level === "heavy" ? 14 : level === "medium" ? 5 : 3;  /* 浮动幅度 px，可调 */
-        const freq  = level === "heavy" ? 0.003 : 0.002;                     /* 浮动频率，可调 */
-        const phase = level === "heavy" ? 0.6 : 1.2;                         /* 相位差，越大越错开 */
+      if (obj._wavyUnits && obj._wavyParams) {
         obj._wavyUnits.forEach((span, i) => {
-          const offset = Math.sin(now * freq + obj.waveSeed + i * phase) * amp;
-          span.style.top = `${offset}px`;
+          const p = obj._wavyParams[i];
+          const vOff = Math.sin(now * p.vFreq + p.vPhase) * p.vAmp;
+          const hOff = Math.sin(now * p.hFreq + p.hPhase) * p.hAmp;
+          span.style.top  = `${vOff}px`;
+          span.style.left = `${hOff}px`;
         });
       }
 
@@ -955,6 +1052,14 @@ async function fetchWeather(lat, lon, cityName) {
   const data = await res.json();
   currentTimezone = data.timezone || currentTimezone;
   const weatherData = classifyWeather(data.current || {});
+  /* store temperature */
+  const rawTemp = data.current?.temperature_2m;
+  if (rawTemp !== undefined && rawTemp !== null) {
+    currentTempC = Number(rawTemp);
+    renderTemp();
+    if (tempBtn) tempBtn.classList.remove("hidden");
+    updateDayNightVisuals(); /* 背景色随新温度更新 */
+  }
   latestApiContext = { lat, lon, cityName, weatherData };
   if (mode === "api") applyWeather(weatherData, cityName);
 }
@@ -1036,13 +1141,17 @@ locationBtn.onclick = (e) => {
 
 function positionDropdownUnder(triggerEl, panelEl) {
   const rect = triggerEl.getBoundingClientRect();
-  const panelWidth = panelEl.offsetWidth || 320;
-  let left = rect.left + rect.width / 2 - panelWidth / 2;
-  left = Math.min(left, window.innerWidth - panelWidth - 10);
-  left = Math.max(left, 10);
-  panelEl.style.top  = (rect.bottom + 8) + "px";
-  panelEl.style.left = left + "px";
+  panelEl.style.top = (rect.bottom + 8) + "px";
   panelEl.style.transform = "none";
+  if (triggerEl === weatherBtn) {
+    /* weather dropdown: right edge aligns to right edge of weatherBtn */
+    panelEl.style.left  = "auto";
+    panelEl.style.right = (window.innerWidth - rect.right) + "px";
+  } else {
+    /* location dropdown: left edge aligns to left edge of locationBtn */
+    panelEl.style.right = "auto";
+    panelEl.style.left  = rect.left + "px";
+  }
 }
 
 cityField.addEventListener("input", () => {
@@ -1097,12 +1206,18 @@ customTextField.addEventListener("keydown", (e) => { if (e.key === "Enter") addC
 function setCustomMode(enabled) {
   mode = enabled ? "custom" : "api";
   customControls.classList.toggle("hidden", !enabled);
-  /* 激活时隐藏按钮，关闭时恢复 */
   customModeBtn.style.display = enabled ? "none" : "";
   if (!enabled) {
     simulatedMinutes = null;
+    simulatedTempC = null;
     if (latestApiContext) applyWeather(latestApiContext.weatherData, latestApiContext.cityName);
   } else {
+    /* 进入 custom mode 时，把 temp slider 初始化到当前真实温度 */
+    if (tempSlider && currentTempC !== null) {
+      const clamped = Math.max(-10, Math.min(40, Math.round(currentTempC)));
+      tempSlider.value = String(clamped);
+      simulatedTempC = clamped;
+    }
     syncCustomSliderDisplay();
   }
 }
@@ -1114,6 +1229,9 @@ function syncCustomSliderDisplay() {
   if (timeSlider && timeSliderValue) {
     const mins = Number(timeSlider.value);
     timeSliderValue.textContent = `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`;
+  }
+  if (tempSlider && tempSliderValue) {
+    tempSliderValue.textContent = `${tempSlider.value}°C`;
   }
 }
 
@@ -1152,6 +1270,18 @@ if (timeSlider) {
   });
 }
 
+/* Temp slider — custom mode 温度覆盖 */
+if (tempSlider) {
+  tempSlider.addEventListener("input", () => {
+    if (mode !== "custom") return;
+    simulatedTempC = Number(tempSlider.value);
+    if (tempSliderValue) tempSliderValue.textContent = `${simulatedTempC}°C`;
+    updateDayNightVisuals();
+    /* 重新计算 accent 对比色 */
+    if (currentAnimatedWeather) applyTypeColor(currentAnimatedWeather);
+  });
+}
+
 /* ============================================================
    ABOUT
    ============================================================ */
@@ -1172,6 +1302,26 @@ document.addEventListener("click", (e) => {
     aboutBtn.classList.remove("hidden-when-open");
   }
 });
+
+/* ============================================================
+   TEMPERATURE DISPLAY
+   ============================================================ */
+function renderTemp() {
+  if (currentTempC === null || !tempBtn) return;
+  if (tempUnitIsCelsius) {
+    tempBtn.textContent = `${Math.round(currentTempC)}°C`;
+  } else {
+    tempBtn.textContent = `${Math.round(currentTempC * 9/5 + 32)}°F`;
+  }
+}
+
+if (tempBtn) {
+  tempBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    tempUnitIsCelsius = !tempUnitIsCelsius;
+    renderTemp();
+  });
+}
 
 /* ============================================================
    TIME DISPLAY
