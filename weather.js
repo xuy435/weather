@@ -24,7 +24,7 @@ const timeSlider = document.getElementById("timeSlider");
 const timeSliderValue = document.getElementById("timeSliderValue");
 const tempSlider = document.getElementById("tempSlider");
 const tempSliderValue = document.getElementById("tempSliderValue");
-const moonEl = document.getElementById("moon");
+const sunIconEl = document.getElementById("sunIcon");
 const customHideBtn = document.getElementById("customHideBtn");
 
 /* ============================================================
@@ -295,7 +295,7 @@ function updateDayNightVisuals() {
   /* --accent (animated phrases + weather label):
      dark bg (lum<100): bright warm yellow rgb(244,216,123) — clearly visible on any dark/cool bg
      light/mid bg (lum>=100): same near-black as text — yellow is unreadable on warm orange/beige */
-  const accentColor = lum < 100 ? "rgb(244,216,123)" : "rgb(35,28,18)";
+  const accentColor = lum < 100 ? "#61BEF2" : "rgb(35,28,18)";
 
   const root = document.documentElement;
   root.style.setProperty('--text',   textColor);
@@ -321,16 +321,19 @@ function updateDayNightVisuals() {
   root.style.setProperty('--slider-track', lum < 128 ? 'rgba(220,228,238,0.35)' : 'rgba(40,32,24,0.35)');
   root.style.setProperty('--slider-thumb', lum < 128 ? 'rgba(220,228,238,0.70)' : 'rgba(40,32,24,0.70)');
 
-  /* 月亮 */
-  if (moonEl) {
-    if (!night && bgFactor > 0.95) {
-      moonEl.style.display = "none";
+  /* 太阳图标 — 顶部中央，根据时间旋转，夜间淡出 */
+  if (sunIconEl) {
+    const iconFilter = lum < 128 ? "invert(1) brightness(1.2)" : "invert(0) brightness(0.3)";
+    const isClear = currentAnimatedWeather?.type === "Clear";
+    if (night || !isClear) {
+      sunIconEl.style.opacity = "0";
     } else {
-      moonEl.style.display = "block";
-      const pos = getMoonPosition(minutes);
-      moonEl.style.left    = pos.x + "px";
-      moonEl.style.top     = pos.y + "px";
-      moonEl.style.opacity = String(Math.max(0.1, 1 - bgFactor));
+      const progress = (minutes - SUNRISE_MIN) / (SUNSET_MIN - SUNRISE_MIN);
+      const deg = progress * 180;
+      const isMobile = window.innerWidth <= 600;
+      sunIconEl.style.transform = (isMobile ? "" : "translateX(-50%) ") + "rotate(" + deg + "deg)";
+      sunIconEl.style.filter = iconFilter;
+      sunIconEl.style.opacity = "1";
     }
   }
 }
@@ -360,31 +363,6 @@ function getSunOrigin(minutesOverride) {
   return { x: (a.x + (b.x - a.x) * s) * world.width, y: (a.y + (b.y - a.y) * s) * world.height };
 }
 
-/* ============================================================
-   MOON POSITION
-   日落后从右下升起 → 正上方子夜 → 左下日出
-   ============================================================ */
-function getMoonPosition(minutesOverride) {
-  const m = minutesOverride ?? getCurrentMinutes();
-  const nightDuration = 1440 - (SUNSET_MIN - SUNRISE_MIN);
-  let np; /* night progress 0→1 */
-  if (m > SUNSET_MIN)      np = (m - SUNSET_MIN) / nightDuration;
-  else if (m < SUNRISE_MIN) np = (1440 - SUNSET_MIN + m) / nightDuration;
-  else                      np = 0.5;
-
-  const mk = [
-    { t: 0.0, x: 1.0,  y: 0.9 },
-    { t: 0.5, x: 0.5,  y: 0.05 },
-    { t: 1.0, x: 0.0,  y: 0.9 },
-  ];
-  let i2 = 0;
-  for (let k = 0; k < mk.length - 1; k++) { if (np >= mk[k].t && np <= mk[k+1].t) { i2 = k; break; } }
-  const ma = mk[i2], mb = mk[i2+1];
-  const mt = (np - ma.t) / (mb.t - ma.t);
-  const ms = mt * mt * (3 - 2 * mt);
-  /* -20 以月亮中心定位（月亮宽40px）*/
-  return { x: (ma.x + (mb.x - ma.x) * ms) * world.width - 20, y: (ma.y + (mb.y - ma.y) * ms) * world.height - 20 };
-}
 
 /* ============================================================
    WORLD / SCENE
@@ -429,7 +407,7 @@ function applyTypeColor(weatherData) {
   const bodyBg = document.body.style.background || "rgb(220,215,200)";
   const m = bodyBg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
   const bgLum = m ? perceivedLightness(+m[1],+m[2],+m[3]) : 180;
-  const color = bgLum < 100 ? "rgb(244,216,123)" : "rgb(35,28,18)";
+  const color = bgLum < 100 ? "#61BEF2" : "rgb(35,28,18)";
   contentEl.style.color = color;
   const bodyBg2 = document.body.style.background || 'rgb(220,215,200)';
   const m2 = bodyBg2.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
@@ -966,8 +944,22 @@ function stepPhysics() {
       const origin = getSunOrigin(simulatedMinutes);
       const dx = obj.x - origin.x, dy = obj.y - origin.y;
       const sf = 0.7 + intensity * 1.0;
-      obj.x += dx * 0.004 * sf + (Math.random() - 0.5) * 0.04;
-      obj.y += dy * 0.004 * sf + Math.sin(now / 380 + obj.x * 0.02) * (0.1 + intensity * 0.2);
+      /* raw drift away from origin */
+      let moveX = dx * 0.004 * sf + (Math.random() - 0.5) * 0.04;
+      let moveY = dy * 0.004 * sf + Math.sin(now / 380 + obj.x * 0.02) * (0.1 + intensity * 0.2);
+      /* if text is near/past left or right edge, add upward pull so it stays visible */
+      const margin = 80;
+      if (obj.x < margin || obj.x > world.width - margin) {
+        moveY -= 0.4 + intensity * 0.3;
+      }
+      /* recycle text that has fully left the screen */
+      if (obj.x < -obj.width - 40 || obj.x > world.width + 40 ||
+          obj.y < -obj.height - 40 || obj.y > world.height + 40) {
+        obj.x = origin.x + (Math.random() - 0.5) * 60;
+        obj.y = origin.y + (Math.random() - 0.5) * 60;
+      }
+      obj.x += moveX;
+      obj.y += moveY;
       obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
 
     } else if (type === "Night") {
@@ -1108,7 +1100,7 @@ weatherBtn.onclick = async (e) => {
   dropdown.classList.toggle("hidden");
   if (dropdown.classList.contains("hidden")) return;
   positionDropdownUnder(weatherBtn, dropdown);
-  dropdown.innerHTML = "<div style='color:#aaa;padding:6px 10px;'>Finding cities...</div>";
+  dropdown.innerHTML = "<div style='color:var(--panel-text);opacity:0.5;padding:6px 10px;'>Finding cities...</div>";
   const cityResults = (await Promise.all(candidateCities.map((city) => getWeatherForCity(city)))).filter(Boolean);
   const options = allStates.map((state) => {
     const found = cityResults.find((item) => item.weatherData.type === state.type && item.weatherData.level === state.level);
@@ -1116,8 +1108,8 @@ weatherBtn.onclick = async (e) => {
   });
   dropdown.innerHTML = options.map((item) =>
     item.city
-      ? `<div data-lat="${item.lat}" data-lon="${item.lon}" data-city="${item.city}">${item.display} — ${item.city}</div>`
-      : `<div style="color:var(--panel-border);cursor:default;opacity:0.45">${item.display} — no city found</div>`
+      ? `<div data-lat="${item.lat}" data-lon="${item.lon}" data-city="${item.city}" style="color:var(--panel-text)">${item.display} — ${item.city}</div>`
+      : `<div style="color:var(--panel-text);cursor:default;opacity:0.35">${item.display} — no city found</div>`
   ).join("");
 };
 
@@ -1141,16 +1133,25 @@ locationBtn.onclick = (e) => {
 
 function positionDropdownUnder(triggerEl, panelEl) {
   const rect = triggerEl.getBoundingClientRect();
+  const isMobile = window.innerWidth <= 600;
+  const pagePad = isMobile ? 16 : 30;
   panelEl.style.top = (rect.bottom + 8) + "px";
   panelEl.style.transform = "none";
-  if (triggerEl === weatherBtn) {
+  if (isMobile) {
+    /* On mobile both dropdowns span full width with page padding */
+    panelEl.style.left  = pagePad + "px";
+    panelEl.style.right = pagePad + "px";
+    panelEl.style.width = "auto";
+  } else if (triggerEl === weatherBtn) {
     /* weather dropdown: right edge aligns to right edge of weatherBtn */
     panelEl.style.left  = "auto";
     panelEl.style.right = (window.innerWidth - rect.right) + "px";
+    panelEl.style.width = "";
   } else {
     /* location dropdown: left edge aligns to left edge of locationBtn */
     panelEl.style.right = "auto";
     panelEl.style.left  = rect.left + "px";
+    panelEl.style.width = "";
   }
 }
 
@@ -1194,8 +1195,75 @@ function renderSuggestions(items) {
 addCustomTextBtn.addEventListener("click", () => {
   const text = customTextField.value.trim();
   if (!text) return;
-  customPhrases.unshift(text); customPhrases = customPhrases.slice(0, 20); customTextField.value = "";
-  if (currentAnimatedWeather) applyWeather(currentAnimatedWeather, locationBtn.textContent);
+  customPhrases.unshift(text);
+  customPhrases = customPhrases.slice(0, 20);
+  customTextField.value = "";
+
+  /* Inject phrase directly into the live scene — no restart */
+  if (!currentAnimatedWeather) return;
+
+  const obj = createPhraseObject(text, 1);
+  measureObject(obj);
+
+  /* Position based on current weather type, same as spawnDynamic */
+  const wd = currentAnimatedWeather;
+  if (wd.type === "Rain") {
+    obj.rainAngle = 25 + Math.random() * 15;
+    obj.x = Math.random() * Math.max(20, world.width - obj.width);
+    obj.y = -obj.height - 20;
+  } else if (wd.type === "Wind") {
+    const wlevel = wd.level;
+    const speed = wlevel === "light" ? 0.0016 : wlevel === "medium" ? 0.0036 : 0.0064;
+    const sx = -0.1, sy = 0.1 + Math.random() * 0.8;
+    const curvature = wlevel === "light" ? 0.15 : wlevel === "medium" ? 0.32 : 0.55;
+    const cx1 = sx + 0.3 + (Math.random() - 0.5) * curvature;
+    const cy1 = sy + (Math.random() - 0.5) * curvature * 2;
+    const cx2 = sx + 0.65 + (Math.random() - 0.5) * curvature;
+    const cy2 = 0.2 + Math.random() * 0.6;
+    const ex = 1.1 + Math.random() * 0.2, ey = 0.1 + Math.random() * 0.8;
+    obj._windArc = { sx, sy, cx1, cy1, cx2, cy2, ex, ey, speed };
+    obj._windT = 0;
+    obj._windRot = 0;
+    obj._windRotV = (Math.random() - 0.5) * (wlevel === "heavy" ? 3 : wlevel === "medium" ? 1.2 : 0.3);
+    obj.x = sx * world.width; obj.y = sy * world.height;
+  } else if (wd.type === "Snow") {
+    obj.x = Math.random() * Math.max(20, world.width - obj.width);
+    obj.y = -obj.height - 20;
+    obj._snowSpeedOffset = Math.random() * 0.15;
+    obj._snowFadeY = 0.80 + Math.random() * 0.10;
+  } else if (wd.type === "Clear") {
+    const edge = Math.floor(Math.random() * 4);
+    if (edge === 0)      { obj.x = Math.random() * world.width; obj.y = -30; }
+    else if (edge === 1) { obj.x = world.width + 30; obj.y = Math.random() * world.height; }
+    else if (edge === 2) { obj.x = Math.random() * world.width; obj.y = world.height + 30; }
+    else                 { obj.x = -30; obj.y = Math.random() * world.height; }
+    const cx = world.width / 2, cy = world.height / 2;
+    obj.spreadAngle = Math.atan2(cy - obj.y, cx - obj.x) + (Math.random() - 0.5) * 0.8;
+  } else if (wd.type === "Cloudy") {
+    const origin = getSunOrigin(simulatedMinutes);
+    obj.x = origin.x + (Math.random() - 0.5) * 25;
+    obj.y = origin.y + (Math.random() - 0.5) * 25;
+  } else {
+    /* Night and fallback */
+    obj.x = Math.random() * Math.max(20, world.width - obj.width);
+    obj.y = -obj.height - 20;
+  }
+
+  obj.el.style.transform = `translate(${obj.x}px, ${obj.y}px)`;
+  phraseObjects.push(obj);
+
+  /* Blink for 4 seconds to highlight the new phrase */
+  const BLINK_DURATION = 4000;
+  const BLINK_INTERVAL = 350;
+  let visible = true;
+  const blinkTimer = setInterval(() => {
+    visible = !visible;
+    obj.el.style.opacity = visible ? "1" : "0";
+  }, BLINK_INTERVAL);
+  setTimeout(() => {
+    clearInterval(blinkTimer);
+    obj.el.style.opacity = "1";
+  }, BLINK_DURATION);
 });
 customTextField.addEventListener("keydown", (e) => { if (e.key === "Enter") addCustomTextBtn.click(); });
 

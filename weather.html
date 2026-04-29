@@ -10,8 +10,8 @@
 </head>
 
 <body>
-  <!-- 月亮元素 — 夜间由 JS 控制显示/隐藏和位置 -->
-  <div id="moon"></div>
+  <!-- 太阳图标 — 固定在顶部中央，根据时间旋转，夜间隐藏 -->
+  <img id="sunIcon" src="sunny.png" alt="" />
 
   <div class="page">
 
@@ -91,13 +91,18 @@
         <br><br>
         This website explores weather as a dynamic system — where text, motion, and atmosphere shift based on real-time conditions.
         <br><br>
-        Click on the location to enter a city you'd like to explore (format: City, Country).
+        LOCATION — Click the city name in the top left to search for any city in the world. The background color, animation, and text will update to reflect that city's live weather and local time.
         <br><br>
-        Click on the weather label to browse different atmospheric states.
+        TEMPERATURE — Click the temperature to toggle between °C and °F.
         <br><br>
-        The location and weather displayed reflect real-world data, continuously shaping the experience.
+        WEATHER — Click the weather label to browse and select from 15 atmospheric states across different cities worldwide.
         <br><br>
-        This project is still in progress and will continue to evolve.
+        CUSTOM TEXT — In the location panel, type any phrase and press Add text to inject it into the animation.
+        <br><br>
+        CUSTOM MODE — Click Custom Mode in the bottom right to manually control four parameters: weather type (Clear, Wind, Rain, Snow), intensity level (Light, Medium, Heavy), time of day (which shifts the background color and sun position), and temperature.
+        <br><br>
+        TIME &amp; COLOR — The background color shifts continuously based on the local time and temperature of the selected city. Daytime colors reflect warmth; night fades into deep blue.
+    
       </p>
     </div>
   </div>

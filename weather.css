@@ -49,24 +49,18 @@ body {
 }
 
 /* ============================================================
-   MOON — 月亮元素
-   纯 CSS 圆形，颜色/大小可在这里调整
-   位置由 JS getMoonPosition() 动态设置
+   SUN ICON — fixed top center, rotates by time, hidden at night
    ============================================================ */
-#moon {
+#sunIcon {
   position: fixed;
-  width: 40px;     /* 月亮大小，可调 */
-  height: 40px;
-  background: #d4cfc8;   /* 月亮颜色，可调 */
-  /* 用 box-shadow 模拟月牙（内阴影遮住一部分形成新月形）
-     如需满月，删除 box-shadow 这行 */
-  box-shadow: inset -6px 2px 0 0 rgba(14, 26, 46, 0.85);
-  z-index: 0;
+  top: calc(var(--page-padding) + 30px);
+  left: 50%;
+  z-index: 1000;
   pointer-events: none;
-  display: none;  /* 初始隐藏，由 JS 控制显示 */
+  width: 22px;
+  height: 22px;
+  opacity: 1;
   transition: opacity 1.5s ease;
-  /* 注意：border-radius 被全局 !important 覆盖，需要手动还原成圆形 */
-  border-radius: 50% !important;
 }
 
 /* ============================================================
@@ -177,7 +171,7 @@ body {
   background: none;
   border: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--panel-text);
   cursor: pointer;
   padding: 2px 6px;
@@ -231,19 +225,28 @@ body {
   border: 1px solid var(--panel-border);
   padding: 10px;
   font-size: 13px;
-  z-index: 999;
+  z-index: 1100;   /* above animation text and all panels */
   max-width: calc(100vw - 32px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 .dropdown.hidden { display: none; }
-.dropdown div { padding: 6px 10px; cursor: pointer; }
-.dropdown div:hover { background: rgba(108, 98, 88, 0.08); }
+.dropdown div { padding: 6px 10px; cursor: pointer; color: var(--panel-text); }
+.dropdown div:hover { background: var(--panel-border); }
 
 /* ============================================================
    CITY INPUT PANEL
    ============================================================ */
 .city-panel { display: flex; flex-direction: column; gap: 8px; width: 300px; }
-.city-panel label { color: var(--label-text); font-size: 12px; }
+
+@media (max-width: 600px) {
+  .city-panel {
+    width: calc(100vw - 32px);  /* full width minus page padding on both sides */
+    left: var(--page-padding) !important;
+    right: var(--page-padding) !important;
+    box-sizing: border-box;
+  }
+}
+.city-panel label { color: var(--panel-text); font-size: 13px; }
 
 #cityField, #customTextField {
   border: 1px solid var(--panel-border);
@@ -253,18 +256,25 @@ body {
   padding: 8px;
   width: 100%;
   background: var(--input-bg);
-  color: var(--input-text);
+  color: var(--panel-text);
+}
+
+#cityField::placeholder, #customTextField::placeholder {
+  color: var(--panel-text);
+  opacity: 0.45;
 }
 
 #addCustomTextBtn {
-  border: 1px solid rgba(108, 98, 88, 0.25);
+  border: 1px solid var(--panel-border);
   padding: 8px 10px;
   font-family: inherit;
+  font-size: 13px;
+  color: var(--panel-text);
   cursor: pointer;
-  background: rgba(96, 188, 201, 0.14);
-  transition: background 0.2s ease;
+  background: transparent;
+  transition: opacity 0.2s ease;
 }
-#addCustomTextBtn:hover { background: rgba(96, 188, 201, 0.26); }
+#addCustomTextBtn:hover { opacity: 0.6; }
 
 .suggestions { border: 1px solid var(--panel-border); overflow: hidden; background: var(--panel-bg); max-height: 180px; overflow-y: auto; }
 .suggestions.hidden { display: none; }
@@ -283,7 +293,7 @@ body {
   display: flex;
   flex-direction: row;
   align-items: flex-end;
-  justify-content: space-around;
+  justify-content: center;
   gap: 0;
   padding: 36px 16px 16px 16px; /* 上方留出 × 按钮空间，四边一致 */
   background: var(--panel-bg);
@@ -298,10 +308,12 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  flex: 1;          /* each group takes equal share of the 240px box */
+  min-width: 0;     /* prevent flex blowout */
 }
 
 #customControls label {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--panel-text);
   text-align: center;
   line-height: 1;
@@ -332,7 +344,7 @@ body {
 
 /* slider 当前值 */
 #weatherTypeValue, #weatherLevelValue, #timeSliderValue, #tempSliderValue {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--panel-text);
   text-align: center;
   min-height: 13px;
@@ -344,7 +356,7 @@ body {
 #customControls input[type="range"]:focus-visible { outline: none; }
 
 .panel-title {
-  font-size: 10px;
+  font-size: 13px;
   color: #5f554c;
   font-weight: 700;
   text-align: center;
@@ -391,7 +403,7 @@ body {
   opacity: 0;
   transform: translateX(16px);
   transition: opacity 0.4s ease, transform 0.4s ease;
-  z-index: 998;
+  z-index: 1100;
   max-height: calc(100vh - 80px);
   overflow-y: auto;
   pointer-events: none;
@@ -412,16 +424,56 @@ body {
 
 /* ============================================================
    MOBILE (max-width: 600px)
+   Stack top bar into a left-aligned column
    ============================================================ */
 @media (max-width: 600px) {
-  :root { --page-padding: 16px; --content-top: 70px; --content-font: 15px; }
-  .top-meta { gap: 6px; }
-  .top-meta button { padding: 5px 10px; font-size: 12px; }
-  #time { width: 100%; text-align: center; font-size: 11px; opacity: 0.7; }
-  #customControls { right: 50%; transform: translateX(50%); }
-  .phrase { font-size: 14px; }
+  :root { --page-padding: 16px; --content-top: 110px; --content-font: 15px; }
+
+  /* Row 1: location */
+  #locationBtn {
+    top: var(--page-padding);
+    left: var(--page-padding);
+    right: auto;
+    padding: 4px 0;
+  }
+
+  /* Row 2: time — left-aligned below location */
+  #time {
+    top: calc(var(--page-padding) + 28px);
+    left: var(--page-padding);
+    right: auto;
+    transform: none;
+    text-align: left;
+    padding: 4px 0;
+  }
+
+  /* Row 3: weather group — left-aligned below time */
+  #weatherGroup {
+    top: calc(var(--page-padding) + 56px);
+    left: var(--page-padding);
+    right: auto;
+    border: none;
+  }
+
+  /* Strip internal padding so temp+weather flush to left edge */
+  #tempBtn {
+    padding-left: 0;
+  }
+  #weatherBtn {
+    padding-left: 4px;
+  }
+
+  /* Sun icon: below temp/weather row, left-aligned */
+  #sunIcon {
+    top: calc(var(--page-padding) + 84px);
+    left: var(--page-padding);
+    transform: none;  /* cancel the desktop translateX(-50%) centering */
+  }
+
+  #customControls { right: var(--page-padding); transform: none; }
+  .phrase { font-size: 13px; }
 }
 
 @media (max-width: 380px) {
-  .top-meta button { padding: 4px 8px; font-size: 11px; }
+  #locationBtn, #time, #weatherGroup { font-size: 13px; }
 }
